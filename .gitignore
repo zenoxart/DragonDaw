@@ -1,0 +1,58 @@
+## .NET / C# / Visual Studio
+
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# Visual Studio files
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstats
+
+# Build logs
+*.log
+msbuild*.wrn
+msbuild*.err
+
+# NuGet
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nupkg
+*.snupkg
+**/[Pp]ackages/*.lock.json
+project.lock.json
+project.fragment.lock.json
+
+# Rider
+.idea/
+*.sln.iml
+
+# Resharper
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+
+# Test results
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+TestResult.xml
+
+# NCrunch
+_NCrunch_*
+.*crunch*.local.xml
+nCrunchTemp_*
+
+# OS files
+.DS_Store
+Thumbs.db
