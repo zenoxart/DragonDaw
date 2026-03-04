@@ -1,0 +1,267 @@
+<UserControl x:Class="DAW.Views.AudioBrowser.AudioBrowserView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="clr-namespace:DAW.ViewModels"
+             x:Name="Root"
+             Background="#0D1117"
+             MinWidth="250">
+    
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="PanelBg" Color="#161B22"/>
+        <SolidColorBrush x:Key="ControlBg" Color="#21262D"/>
+        <SolidColorBrush x:Key="BorderBrush" Color="#30363D"/>
+        <SolidColorBrush x:Key="TextBrush" Color="#C9D1D9"/>
+        <SolidColorBrush x:Key="TextDimBrush" Color="#8B949E"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="#26619C"/>
+        <SolidColorBrush x:Key="AccentLightBrush" Color="#5BA4E6"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        
+        <HierarchicalDataTemplate DataType="{x:Type viewModels:AudioBrowserFolderViewModel}" 
+                                  ItemsSource="{Binding Children}">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="📁" Margin="0,0,4,0" Foreground="#5BA4E6"/>
+                <TextBlock Text="{Binding Name}" Foreground="{StaticResource TextBrush}"/>
+                <TextBlock Text=" (Loading...)" 
+                           Foreground="{StaticResource TextDimBrush}"
+                           FontSize="10"
+                           Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}"
+                           Margin="5,0,0,0"/>
+            </StackPanel>
+        </HierarchicalDataTemplate>
+        
+        <DataTemplate DataType="{x:Type viewModels:AudioBrowserFileViewModel}">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding FileIcon}" Margin="0,0,4,0"/>
+                <TextBlock Text="{Binding Name}" Foreground="{StaticResource TextBrush}"/>
+                <TextBlock Text="{Binding Extension}" Foreground="{StaticResource TextDimBrush}" 
+                          FontSize="10" VerticalAlignment="Center" Margin="5,0,0,0"/>
+            </StackPanel>
+        </DataTemplate>
+        
+        <Style TargetType="TreeViewItem">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="Margin" Value="1"/>
+            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                    <Setter Property="Foreground" Value="White"/>
+                </Trigger>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{StaticResource ControlBg}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        
+        <Style x:Key="NavButton" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource ControlBg}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Foreground" Value="{StaticResource TextDimBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+    
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        
+        <!-- Header -->
+        <Border Grid.Row="0" 
+                Background="{StaticResource PanelBg}" 
+                BorderBrush="{StaticResource BorderBrush}" 
+                BorderThickness="0,0,0,1" 
+                Padding="8,6">
+            <StackPanel>
+                <TextBlock Text="◆ AUDIO BROWSER" 
+                           Foreground="{StaticResource AccentLightBrush}" 
+                           FontWeight="Bold"
+                           FontSize="12"/>
+                <TextBlock Text="{Binding CurrentPath}" 
+                           Foreground="{StaticResource TextDimBrush}"
+                           FontSize="10"
+                           Margin="0,2,0,0"
+                           TextTrimming="CharacterEllipsis"/>
+            </StackPanel>
+        </Border>
+        
+        <!-- Navigation Controls -->
+        <Border Grid.Row="1" 
+                Background="{StaticResource ControlBg}"
+                BorderBrush="{StaticResource BorderBrush}"
+                BorderThickness="0,0,0,1"
+                Padding="4">
+            <StackPanel Orientation="Horizontal">
+                <Button Content="◀" Style="{StaticResource NavButton}" 
+                        Command="{Binding GoBackCommand}" ToolTip="Back"/>
+                <Button Content="▶" Style="{StaticResource NavButton}" 
+                        Command="{Binding GoForwardCommand}" ToolTip="Forward"/>
+                <Button Content="🏠" Style="{StaticResource NavButton}" 
+                        Command="{Binding GoToMusicFolderCommand}" ToolTip="Music Folder"/>
+                <Button Content="💾" Style="{StaticResource NavButton}" 
+                        Command="{Binding GoToDesktopCommand}" ToolTip="Desktop"/>
+            </StackPanel>
+        </Border>
+        
+        <!-- Search -->
+        <Border Grid.Row="2" 
+                Background="{StaticResource ControlBg}"
+                BorderBrush="{StaticResource BorderBrush}"
+                BorderThickness="0,0,0,1"
+                Padding="8,6">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="SearchBox"
+                         Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                         Background="{StaticResource PanelBg}"
+                         Foreground="{StaticResource TextBrush}"
+                         BorderBrush="{StaticResource BorderBrush}"
+                         BorderThickness="1"
+                         Padding="6,4"
+                         FontSize="11"/>
+                <TextBlock Text="🔍 Search..." 
+                           Foreground="{StaticResource TextDimBrush}"
+                           IsHitTestVisible="False"
+                           VerticalAlignment="Center"
+                           Margin="8,0,0,0">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ElementName=SearchBox, Path=Text}" Value="">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+                <Button Grid.Column="1" Content="⭐" Style="{StaticResource NavButton}"
+                        Command="{Binding AddToFavoritesCommand}" ToolTip="Add to Favorites"
+                        Margin="4,0,0,0"/>
+            </Grid>
+        </Border>
+        
+        <!-- Main Content -->
+        <Grid Grid.Row="3">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            
+            <!-- Favorites Section -->
+            <Expander Grid.Row="0" Header="⭐ FAVORITES" 
+                      Background="{StaticResource PanelBg}"
+                      Foreground="{StaticResource TextBrush}"
+                      BorderBrush="{StaticResource BorderBrush}"
+                      IsExpanded="True"
+                      Margin="0,0,0,4">
+                <ItemsControl ItemsSource="{Binding FavoritePaths}" 
+                              Background="{StaticResource ControlBg}"
+                              Padding="4">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="Transparent" 
+                                    Padding="4,2" 
+                                    Margin="1"
+                                    MouseLeftButtonUp="Favorite_Click">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Style.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding}" 
+                                               Foreground="{StaticResource TextBrush}"
+                                               FontSize="11"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <Button Grid.Column="1" Content="❌" 
+                                            FontSize="10" 
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Foreground="{StaticResource TextDimBrush}"
+                                            Padding="2"
+                                            Margin="4,0,0,0"
+                                            Click="RemoveFavorite_Click"
+                                            ToolTip="Remove"/>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Expander>
+            
+            <!-- Browser Tree -->
+            <TreeView x:Name="BrowserTree"
+                      Grid.Row="1"
+                      ItemsSource="{Binding RootItems}"
+                      Background="{StaticResource PanelBg}"
+                      BorderThickness="1"
+                      BorderBrush="{StaticResource BorderBrush}"
+                      Padding="4"
+                      ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                      SelectedItemChanged="BrowserTree_SelectedItemChanged"
+                      TreeViewItem.Expanded="BrowserTree_Expanded"
+                      TreeViewItem.Collapsed="BrowserTree_Collapsed"
+                      PreviewMouseLeftButtonDown="BrowserTree_PreviewMouseLeftButtonDown"
+                      MouseMove="BrowserTree_MouseMove"
+                      MouseDoubleClick="BrowserTree_MouseDoubleClick"/>
+        </Grid>
+        
+        <!-- Loading Indicator -->
+        <Border Grid.RowSpan="4" 
+                Background="#80000000"
+                Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock Text="🔄" FontSize="24" HorizontalAlignment="Center" 
+                           Foreground="{StaticResource AccentLightBrush}">
+                    <TextBlock.RenderTransform>
+                        <RotateTransform x:Name="LoadingRotation"/>
+                    </TextBlock.RenderTransform>
+                    <TextBlock.Triggers>
+                        <EventTrigger RoutedEvent="Loaded">
+                            <BeginStoryboard>
+                                <Storyboard RepeatBehavior="Forever">
+                                    <DoubleAnimation Storyboard.TargetName="LoadingRotation"
+                                                   Storyboard.TargetProperty="Angle"
+                                                   From="0" To="360" Duration="0:0:1"/>
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                    </TextBlock.Triggers>
+                </TextBlock>
+                <TextBlock Text="Loading..." 
+                           Foreground="{StaticResource TextBrush}" 
+                           FontSize="12" 
+                           Margin="0,8,0,0"
+                           HorizontalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

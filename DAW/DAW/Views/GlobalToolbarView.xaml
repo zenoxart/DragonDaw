@@ -1,0 +1,213 @@
+<UserControl x:Class="DAW.Views.GlobalToolbarView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:DAW.ViewModels"
+             Background="#161B22"
+             Height="48">
+
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        
+        <!-- Transport Button Style -->
+        <Style x:Key="TransportBtn" TargetType="Button">
+            <Setter Property="Background" Value="#21262D"/>
+            <Setter Property="Foreground" Value="#AABBCC"/>
+            <Setter Property="BorderBrush" Value="#30363D"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="MinWidth" Value="40"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#2D3748"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#C41E3A"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#1A202C"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Tool Toggle Button Style -->
+        <Style x:Key="ToolBtn" TargetType="ToggleButton">
+            <Setter Property="Background" Value="#21262D"/>
+            <Setter Property="Foreground" Value="#AABBCC"/>
+            <Setter Property="BorderBrush" Value="#30363D"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="Margin" Value="1"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="MinWidth" Value="32"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="3"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#2D3748"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#C41E3A"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#C41E3A"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#E63946"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Toggle Control Style -->
+        <Style x:Key="ToggleBtn" TargetType="ToggleButton">
+            <Setter Property="Background" Value="#21262D"/>
+            <Setter Property="Foreground" Value="#AABBCC"/>
+            <Setter Property="BorderBrush" Value="#30363D"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="3"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#2D3748"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#4CAF50"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#66BB6A"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Border BorderBrush="#30363D" BorderThickness="0,0,0,1" Padding="8,6">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/> <!-- Transport Controls -->
+                <ColumnDefinition Width="Auto"/> <!-- Position Display -->
+                <ColumnDefinition Width="20"/>   <!-- Spacer -->
+                <ColumnDefinition Width="Auto"/> <!-- Edit Commands -->
+                <ColumnDefinition Width="20"/>   <!-- Spacer -->
+                <ColumnDefinition Width="Auto"/> <!-- Edit Tools -->
+                <ColumnDefinition Width="20"/>   <!-- Spacer -->
+                <ColumnDefinition Width="Auto"/> <!-- Toggles -->
+                <ColumnDefinition Width="*"/>    <!-- Flex space -->
+            </Grid.ColumnDefinitions>
+
+            
+
+          
+
+            <!-- Edit Commands -->
+            <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="EDIT" Foreground="#445566" FontSize="9" FontWeight="Bold"
+                           VerticalAlignment="Center" Margin="0,0,8,0"/>
+                
+                <Button Content="↶" Command="{Binding UndoCommand}" Style="{StaticResource TransportBtn}"
+                        ToolTip="Rückgängig (Ctrl+Z)" FontSize="9" Width="32"/>
+                        
+                <Button Content="↷" Command="{Binding RedoCommand}" Style="{StaticResource TransportBtn}"
+                        ToolTip="Wiederholen (Ctrl+Y)" FontSize="9" Width="32"/>
+                        
+                <Rectangle Width="1" Fill="#30363D" Margin="4,6"/>
+                
+                <Button Content="✂" Command="{Binding CutCommand}" Style="{StaticResource TransportBtn}"
+                        ToolTip="Ausschneiden (Ctrl+X)" FontSize="12" Width="32"/>
+                        
+                <Button Content="📋" Command="{Binding CopyCommand}" Style="{StaticResource TransportBtn}"
+                        ToolTip="Kopieren (Ctrl+C)" FontSize="12" Width="32"/>
+                        
+                <Button Content="📄" Command="{Binding PasteCommand}" Style="{StaticResource TransportBtn}"
+                        ToolTip="Einfügen (Ctrl+V)" FontSize="12" Width="32"/>
+                        
+                <Button Content="🗑" Command="{Binding DeleteCommand}" Style="{StaticResource TransportBtn}"
+                        ToolTip="Löschen (Delete)" FontSize="12" Width="32"/>
+            </StackPanel>
+
+            <!-- Edit Tools -->
+            <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="TOOLS" Foreground="#445566" FontSize="9" FontWeight="Bold"
+                           VerticalAlignment="Center" Margin="0,0,8,0"/>
+                
+                <ToggleButton Content="📍" Style="{StaticResource ToolBtn}"
+                              IsChecked="{Binding IsSelectToolActive, Mode=OneWay}" Command="{Binding SelectToolCommand}"
+                              ToolTip="Auswahl-Tool (S) - Objekte auswählen und verschieben"/>
+                              
+                <ToggleButton Content="✏" Style="{StaticResource ToolBtn}"
+                              IsChecked="{Binding IsDrawToolActive, Mode=OneWay}" Command="{Binding DrawToolCommand}"
+                              ToolTip="Zeichen-Tool (D) - Neue Noten/Clips erstellen"/>
+                              
+                <ToggleButton Content="🖌" Style="{StaticResource ToolBtn}"
+                              IsChecked="{Binding IsPaintToolActive, Mode=OneWay}" Command="{Binding PaintToolCommand}"
+                              ToolTip="Pinsel-Tool (P) - Mehrere Objekte schnell hinzufügen"/>
+                              
+                <ToggleButton Content="✂" Style="{StaticResource ToolBtn}"
+                              IsChecked="{Binding IsSliceToolActive, Mode=OneWay}" Command="{Binding SliceToolCommand}"
+                              ToolTip="Schnitt-Tool (C) - Clips und Noten teilen"/>
+                              
+                <ToggleButton Content="↔" Style="{StaticResource ToolBtn}"
+                              IsChecked="{Binding IsResizeToolActive, Mode=OneWay}" Command="{Binding ResizeToolCommand}"
+                              ToolTip="Größe-Tool (R) - Objektlängen ändern"/>
+                              
+                <ToggleButton Content="🔍" Style="{StaticResource ToolBtn}"
+                              IsChecked="{Binding IsZoomToolActive, Mode=OneWay}" Command="{Binding ZoomToolCommand}"
+                              ToolTip="Zoom-Tool (Z) - Bereich vergrößern"/>
+            </StackPanel>
+
+            <!-- Toggle Controls -->
+            <StackPanel Grid.Column="7" Orientation="Horizontal" VerticalAlignment="Center">
+                <ToggleButton Content="MON" Style="{StaticResource ToggleBtn}"
+                              IsChecked="{Binding IsMonitoringEnabled, Mode=OneWay}" Command="{Binding ToggleMonitoringCommand}"
+                              ToolTip="Audio-Monitoring ein/aus"/>
+                              
+                <ToggleButton Content="MET" Style="{StaticResource ToggleBtn}"
+                              IsChecked="{Binding IsMetronomeEnabled, Mode=OneWay}" Command="{Binding ToggleMetronomeCommand}"
+                              ToolTip="Metronom ein/aus"/>
+            </StackPanel>
+
+        </Grid>
+    </Border>
+</UserControl>

@@ -1,0 +1,32 @@
+﻿<Application x:Class="DAW.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:DAW"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Resources/MenuStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            
+            <!-- Lapis Color Palette -->
+            <Color x:Key="LapisBlue">#26619C</Color>
+            <Color x:Key="LapisLight">#4A90D9</Color>
+            <Color x:Key="LapisDark">#1A4570</Color>
+            <Color x:Key="LapisAccent">#5BA4E6</Color>
+            <Color x:Key="LapisGold">#D4AF37</Color>
+            
+            <SolidColorBrush x:Key="LapisBlueBrush" Color="{StaticResource LapisBlue}"/>
+            <SolidColorBrush x:Key="LapisLightBrush" Color="{StaticResource LapisLight}"/>
+            <SolidColorBrush x:Key="LapisDarkBrush" Color="{StaticResource LapisDark}"/>
+            <SolidColorBrush x:Key="LapisAccentBrush" Color="{StaticResource LapisAccent}"/>
+            <SolidColorBrush x:Key="LapisGoldBrush" Color="{StaticResource LapisGold}"/>
+            
+            <!-- Background Colors -->
+            <SolidColorBrush x:Key="DarkBg" Color="#0D1117"/>
+            <SolidColorBrush x:Key="PanelBg" Color="#161B22"/>
+            <SolidColorBrush x:Key="ControlBg" Color="#21262D"/>
+            <SolidColorBrush x:Key="BorderBrush" Color="#30363D"/>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

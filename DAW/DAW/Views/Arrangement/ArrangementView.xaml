@@ -1,0 +1,442 @@
+<UserControl x:Class="DAW.Views.Arrangement.ArrangementView"
+xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+xmlns:vm="clr-namespace:DAW.ViewModels"
+xmlns:local="clr-namespace:DAW.Views.Arrangement"
+Background="#0D1117">
+
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <!-- Small toolbar button -->
+        <Style x:Key="ArrangeBtn" TargetType="Button">
+            <Setter Property="Background"   Value="#21262D"/>
+            <Setter Property="Foreground"   Value="#AABBCC"/>
+            <Setter Property="BorderBrush"  Value="#30363D"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding"      Value="8,3"/>
+            <Setter Property="Margin"       Value="2,0"/>
+            <Setter Property="FontSize"     Value="11"/>
+            <Setter Property="Cursor"       Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="3"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#2D3748"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#C41E3A"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Track header inline DataTemplate -->
+        <DataTemplate x:Key="TrackHeaderTemplate"
+                      DataType="{x:Type vm:ArrangementTrackViewModel}">
+            <Border Height="52"
+                    Background="#161B22"
+                    BorderBrush="#21262D"
+                    BorderThickness="0,0,0,1">
+                <Border.InputBindings>
+                    <MouseBinding Gesture="RightClick" Command="{Binding DeleteTrackCommand}"/>
+                </Border.InputBindings>
+                <Grid Margin="4,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="4"/>   <!-- color strip -->
+                        <ColumnDefinition Width="12"/>  <!-- LED -->
+                        <ColumnDefinition Width="*"/>   <!-- name -->
+                        <ColumnDefinition Width="18"/>  <!-- X -->
+                        <ColumnDefinition Width="22"/>  <!-- M -->
+                        <ColumnDefinition Width="22"/>  <!-- S -->
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Track colour strip -->
+                    <Rectangle Grid.Column="0" RadiusX="2" RadiusY="2" Margin="0,10">
+                        <Rectangle.Fill>
+                            <SolidColorBrush Color="{Binding Color}"/>
+                        </Rectangle.Fill>
+                    </Rectangle>
+
+                    <!-- Activity LED -->
+                    <Ellipse Grid.Column="1" Width="7" Height="7" Margin="2,0">
+                        <Ellipse.Style>
+                            <Style TargetType="Ellipse">
+                                <Setter Property="Fill" Value="#252D38"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                        <Setter Property="Fill" Value="#4CAF50"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Ellipse.Style>
+                    </Ellipse>
+
+                    <!-- Track name -->
+                    <TextBlock Grid.Column="2"
+                               Text="{Binding Name}"
+                               Foreground="#CCDDEE"
+                               FontSize="11"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"
+                               Margin="4,0"/>
+
+                    <!-- Delete Track -->
+                    <Button Grid.Column="3"
+                            Content="×"
+                            Command="{Binding DeleteTrackCommand}"
+                            Width="16" Height="16"
+                            FontSize="12" FontWeight="Bold"
+                            Margin="1,0" Cursor="Hand"
+                            BorderThickness="1"
+                            Foreground="#AA5555"
+                            ToolTip="Track löschen">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource ArrangeBtn}">
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="BorderBrush" Value="Transparent"/>
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="#C62828"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                        <Setter Property="BorderBrush" Value="#EF5350"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+
+                    <!-- Mute -->
+                    <Button Grid.Column="4"
+                            Content="M"
+                            Command="{Binding ToggleMuteCommand}"
+                            Width="20" Height="18"
+                            FontSize="9" FontWeight="Bold"
+                            Margin="1,0" Cursor="Hand"
+                            BorderThickness="1">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource ArrangeBtn}">
+                                <Setter Property="Padding" Value="0"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsMuted}" Value="True">
+                                        <Setter Property="Background" Value="#C62828"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                        <Setter Property="BorderBrush" Value="#EF5350"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+
+                    <!-- Solo -->
+                    <Button Grid.Column="5"
+                            Content="S"
+                            Command="{Binding ToggleSoloCommand}"
+                            Width="20" Height="18"
+                            FontSize="9" FontWeight="Bold"
+                            Margin="1,0" Cursor="Hand"
+                            BorderThickness="1">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource ArrangeBtn}">
+                                <Setter Property="Padding" Value="0"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsSolo}" Value="True">
+                                        <Setter Property="Background" Value="#F9A825"/>
+                                        <Setter Property="Foreground" Value="#0D1117"/>
+                                        <Setter Property="BorderBrush" Value="#FFD54F"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="36"/>   <!-- Toolbar -->
+            <RowDefinition Height="24"/>   <!-- Ruler row -->
+            <RowDefinition Height="*"/>    <!-- Content row - uses all available space -->
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="200"/>   <!-- Track header panel -->
+            <ColumnDefinition Width="*"/>     <!-- Timeline area -->
+        </Grid.ColumnDefinitions>
+
+        <!-- ══════════════════════════════════════════════════════════════════ -->
+        <!-- Toolbar (spans full width)                                        -->
+        <!-- ══════════════════════════════════════════════════════════════════ -->
+        <Border Grid.Row="0" Grid.ColumnSpan="2"
+                Background="#161B22"
+                BorderBrush="#30363D"
+                BorderThickness="0,0,0,1"
+                Padding="8,4">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+
+                <!-- Zoom controls -->
+                <Button Content="−" Command="{Binding ZoomOutCommand}"
+                        Style="{StaticResource ArrangeBtn}" Width="22" ToolTip="Herauszoomen (Ctrl+Scroll)"/>
+
+                <Border Background="#0D1117" CornerRadius="2" Padding="6,2" Margin="2,0">
+                    <TextBlock Text="{Binding ZoomDisplay}"
+                               Foreground="#E63946" FontSize="11"
+                               VerticalAlignment="Center" Width="36"
+                               TextAlignment="Center"/>
+                </Border>
+
+                <Button Content="+" Command="{Binding ZoomInCommand}"
+                        Style="{StaticResource ArrangeBtn}" Width="22" ToolTip="Hineinzoomen"/>
+                <Button Content="1:1" Command="{Binding ZoomResetCommand}"
+                        Style="{StaticResource ArrangeBtn}" ToolTip="Zoom zurücksetzen"/>
+
+                <Rectangle Width="1" Fill="#30363D" Margin="8,4"/>
+
+                <!-- Snap controls -->
+                <TextBlock Text="SNAP" Foreground="#445566" FontSize="10"
+                           VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <Button Content="1/4"  Command="{Binding SnapQuarterCommand}"
+                        Style="{StaticResource ArrangeBtn}" ToolTip="Viertelnote"/>
+                <Button Content="1/8"  Command="{Binding SnapEighthCommand}"
+                        Style="{StaticResource ArrangeBtn}" ToolTip="Achtelnote"/>
+                <Button Content="1/16" Command="{Binding SnapSixteenthCommand}"
+                        Style="{StaticResource ArrangeBtn}" ToolTip="Sechzehntel"/>
+
+                <Rectangle Width="1" Fill="#30363D" Margin="8,4"/>
+
+                <!-- BPM display -->
+                <Border Background="#0D1117" CornerRadius="2" Padding="8,2" Margin="2,0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding BPM, StringFormat={}{0:F0}}"
+                                   Foreground="#E63946" FontWeight="Bold" FontSize="13"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock Text=" BPM" Foreground="#445566" FontSize="10"
+                                   VerticalAlignment="Center" Margin="1,2,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <Rectangle Width="1" Fill="#30363D" Margin="8,4"/>
+
+                <!-- Usage hint -->
+                <TextBlock Text="Klicken = Clip hinzufügen  ·  Ziehen = Bewegen  ·  Rechts ziehen = Resize  ·  Ctrl+Scroll = Zoom  ·  Drag Audio = Neue Audio-Clips"
+                           Foreground="#2D3D50" FontSize="10" VerticalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+
+        <!-- ══════════════════════════════════════════════════════════════════ -->
+        <!-- Corner (top-left, above track headers) - STICKY                   -->
+        <!-- ══════════════════════════════════════════════════════════════════ -->
+        <Border Grid.Row="1" Grid.Column="0"
+                Background="#161B22"
+                BorderBrush="#30363D"
+                BorderThickness="0,0,1,1">
+            <TextBlock Text="TRACKS" Foreground="#2D4055" FontSize="9" FontWeight="Bold"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        </Border>
+
+        <!-- ══════════════════════════════════════════════════════════════════ -->
+        <!-- Ruler (horizontally scrollable, synced with timeline)             -->
+        <!-- ══════════════════════════════════════════════════════════════════ -->
+        <ScrollViewer x:Name="RulerScrollView"
+                      Grid.Row="1" Grid.Column="1"
+                      HorizontalScrollBarVisibility="Hidden"
+                      VerticalScrollBarVisibility="Disabled"
+                      IsHitTestVisible="False"
+                      UseLayoutRounding="True"
+                      SnapsToDevicePixels="True">
+            <local:PixelPerfectRulerControl
+                Height="24"
+                Width="{Binding TotalTimelineWidth}"
+                PixelsPerBeat="{Binding PixelsPerBeat}"
+                BeatsPerBar="4"/>
+        </ScrollViewer>
+
+        <!-- ══════════════════════════════════════════════════════════════════ -->
+        <!-- STICKY Track header panel (vertically synced, no scrollbar)       -->
+        <!-- ══════════════════════════════════════════════════════════════════ -->
+        <ScrollViewer x:Name="HeaderScrollView"
+                      Grid.Row="2" Grid.Column="0"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Hidden"
+                      Background="#161B22"
+                      BorderBrush="#30363D"
+                      BorderThickness="0,0,1,0"
+                      UseLayoutRounding="True"
+                      SnapsToDevicePixels="True">
+            
+            <StackPanel>
+                <!-- Tracks -->
+                <ItemsControl ItemsSource="{Binding Tracks}"
+                              ItemTemplate="{StaticResource TrackHeaderTemplate}"
+                              VirtualizingStackPanel.IsVirtualizing="True"
+                              VirtualizingStackPanel.VirtualizationMode="Recycling">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <VirtualizingStackPanel/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+                
+                <!-- Add Track Button at bottom -->
+                <Border Background="#1A1F26" BorderBrush="#30363D" BorderThickness="0,1,0,0" Padding="4,2">
+                    <Button Content="+ Track hinzufügen"
+                            Command="{Binding AddEmptyTrackCommand}"
+                            Style="{StaticResource ArrangeBtn}"
+                            HorizontalAlignment="Stretch"
+                            FontSize="10"
+                            Height="24"
+                            ToolTip="Neuen leeren Track hinzufügen"/>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- ══════════════════════════════════════════════════════════════════ -->
+        <!-- MAIN TIMELINE ScrollViewer (single vertical scrollbar)            -->
+        <!--   ① TimelineGridControl  — DrawingVisual background              -->
+        <!--   ② Track lane rows      — virtualized ItemsControl               -->
+        <!--   ③ Playhead overlay     — Canvas rectangle, no hit-test          -->
+        <!-- ══════════════════════════════════════════════════════════════════ -->
+        <ScrollViewer x:Name="TimelineScrollView"
+                      Grid.Row="2" Grid.Column="1"
+                      HorizontalScrollBarVisibility="Auto"
+                      VerticalScrollBarVisibility="Auto"
+                      Background="#0D1117"
+                      ScrollChanged="TimelineScrollView_ScrollChanged"
+                      PreviewMouseWheel="TimelineScrollView_PreviewMouseWheel"
+                      UseLayoutRounding="True"
+                      SnapsToDevicePixels="True"
+                      SizeChanged="TimelineScrollView_SizeChanged"
+                      AllowDrop="True"
+                      DragEnter="TimelineScrollView_DragEnter"
+                      DragOver="TimelineScrollView_DragOver"
+                      Drop="TimelineScrollView_Drop">
+
+            <!-- Fixed-size canvas matching total timeline dimensions -->
+            <Grid x:Name="TimelineGrid"
+                  Width="{Binding TotalTimelineWidth}"
+                  Height="{Binding TotalTimelineHeight}"
+                  Background="Transparent"
+                  UseLayoutRounding="True"
+                  SnapsToDevicePixels="True"
+                  MouseDown="TimelineGrid_MouseDown"
+                  VerticalAlignment="Top"
+                  >
+
+                <!-- ① Background grid (beat lines + track separators) -->
+                <local:PixelPerfectTimelineGridControl
+                    PixelsPerBeat="{Binding PixelsPerBeat}"
+                    TrackHeight="52"
+                    TrackCount="{Binding Tracks.Count}"
+                    BeatsPerBar="4"
+                    IsHitTestVisible="False"/>
+
+                <!-- ② Track lane rows (100+ track virtualization) -->
+                <ItemsControl ItemsSource="{Binding Tracks}"
+                              VirtualizingStackPanel.IsVirtualizing="True"
+                              VirtualizingStackPanel.VirtualizationMode="Recycling"
+                              UseLayoutRounding="True"
+                              SnapsToDevicePixels="True">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <VirtualizingStackPanel/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type vm:ArrangementTrackViewModel}">
+
+                            <!-- Lane row — click to add clip, clips float on Canvas -->
+                            <Border Height="52"
+                                    Background="Transparent"
+                                    BorderBrush="#151D2A"
+                                    BorderThickness="0,0,0,1"
+                                    UseLayoutRounding="True"
+                                    SnapsToDevicePixels="True"
+                                    MouseDown="TrackLane_MouseDown">
+
+                                <!-- Clip canvas for this track -->
+                                <ItemsControl ItemsSource="{Binding Clips}"
+                                              UseLayoutRounding="True"
+                                              SnapsToDevicePixels="True">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <Canvas UseLayoutRounding="True" SnapsToDevicePixels="True"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemContainerStyle>
+                                        <Style TargetType="ContentPresenter">
+                                            <Setter Property="Canvas.Left" Value="{Binding PixelLeft}"/>
+                                            <Setter Property="Canvas.Top"  Value="2"/>
+                                            <Setter Property="UseLayoutRounding" Value="True"/>
+                                            <Setter Property="SnapsToDevicePixels" Value="True"/>
+                                        </Style>
+                                    </ItemsControl.ItemContainerStyle>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:ArrangementClipViewModel}">
+                                            <local:ClipControl Width="{Binding PixelWidth}"
+                                                               Height="48"
+                                                               UseLayoutRounding="True"
+                                                               SnapsToDevicePixels="True"/>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Border>
+
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- ③ Playhead needle (interactive overlay for seeking) -->
+                <Canvas UseLayoutRounding="True"
+                        SnapsToDevicePixels="True">
+                    <!-- Invisible hit test area for easier clicking -->
+                    <Rectangle x:Name="PlayheadHitArea"
+                               Canvas.Left="{Binding PlayheadPixel}"
+                               Canvas.Top="0"
+                               Width="10"
+                               Height="{Binding TotalTimelineHeight}"
+                               Fill="Transparent"
+                               Margin="-5,0,0,0"
+                               Cursor="Hand"
+                               MouseDown="Playhead_MouseDown"
+                               MouseMove="Playhead_MouseMove"
+                               MouseUp="Playhead_MouseUp"
+                               UseLayoutRounding="True"
+                               SnapsToDevicePixels="True"/>
+                    
+                    <!-- Playhead triangle indicator at top -->
+                    <Path x:Name="PlayheadTriangle"
+                          Canvas.Left="{Binding PlayheadPixel}"
+                          Canvas.Top="0"
+                          Fill="#E63946"
+                          Data="M -5,0 L 5,0 L 0,8 Z"
+                          UseLayoutRounding="True"
+                          SnapsToDevicePixels="True"/>
+                    
+                    <!-- Playhead vertical line -->
+                    <Rectangle x:Name="PlayheadLine"
+                               Canvas.Left="{Binding PlayheadPixel}"
+                               Canvas.Top="0"
+                               Width="1.5"
+                               Height="{Binding TotalTimelineHeight}"
+                               Fill="#E63946"
+                               UseLayoutRounding="True"
+                               SnapsToDevicePixels="True"/>
+                </Canvas>
+
+            </Grid>
+        </ScrollViewer>
+
+    </Grid>
+</UserControl>
