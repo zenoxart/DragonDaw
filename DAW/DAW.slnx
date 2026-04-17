@@ -1,4 +1,3 @@
 <Solution>
-  <Project Path="DAW.Tests/DAW.Tests.csproj" />
   <Project Path="DAW/DAW.csproj" />
 </Solution>

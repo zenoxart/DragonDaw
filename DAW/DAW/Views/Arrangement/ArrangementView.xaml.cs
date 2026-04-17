@@ -211,6 +211,9 @@ public partial class ArrangementView : UserControl
 
     private async void TimelineScrollView_Drop(object sender, DragEventArgs e)
     {
+        // Mark handled immediately to prevent MainWindow's Window_Drop from also creating a track
+        e.Handled = true;
+        
         System.Diagnostics.Debug.WriteLine("=== AUDIO DROP OPERATION START ===");
         
         if (Vm == null) 
@@ -234,10 +237,20 @@ public partial class ArrangementView : UserControl
             var trackIndex = (int)(position.Y / 52); // 52 is track height
             System.Diagnostics.Debug.WriteLine($"Calculated track index: {trackIndex} (Y={position.Y} / 52)");
             
-            if (trackIndex < 0 || trackIndex >= Vm.Tracks.Count) 
+            // Auto-create a new track if dropped outside existing tracks
+            var trackWasAutoCreated = false;
+            if (trackIndex < 0 || trackIndex >= Vm.Tracks.Count)
             {
-                System.Diagnostics.Debug.WriteLine($"ERROR: Track index out of range. Valid range: 0-{Vm.Tracks.Count - 1}");
-                return;
+                System.Diagnostics.Debug.WriteLine($"Track index out of range. Creating new track automatically.");
+                Vm.AddEmptyTrackCommand.Execute(null);
+                trackIndex = Vm.Tracks.Count - 1;
+                trackWasAutoCreated = true;
+                
+                if (trackIndex < 0)
+                {
+                    System.Diagnostics.Debug.WriteLine("ERROR: Failed to create new track.");
+                    return;
+                }
             }
             
             var targetTrack = Vm.Tracks[trackIndex];
@@ -265,6 +278,17 @@ public partial class ArrangementView : UserControl
 
             if (!string.IsNullOrEmpty(audioFilePath))
             {
+                // Rename auto-created track to match the audio file
+                if (trackWasAutoCreated)
+                {
+                    targetTrack.Model.Title = System.IO.Path.GetFileNameWithoutExtension(audioFilePath);
+                    targetTrack.Model.FilePath = audioFilePath;
+                }
+                else if (string.IsNullOrEmpty(targetTrack.Model.FilePath))
+                {
+                    targetTrack.Model.FilePath = audioFilePath;
+                }
+
                 var extension = System.IO.Path.GetExtension(audioFilePath);
                 if (AudioAnalysisService.IsSupportedFormat(extension))
                 {
@@ -297,8 +321,6 @@ public partial class ArrangementView : UserControl
         {
             System.Diagnostics.Debug.WriteLine("=== AUDIO DROP OPERATION END ===");
         }
-
-        e.Handled = true;
     }
 
     // ── Playhead animation and timing ─────────────────────────────────────────
