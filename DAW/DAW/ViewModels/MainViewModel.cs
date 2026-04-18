@@ -35,6 +35,7 @@ public class MainViewModel : INotifyPropertyChanged
     ];
     
     private Track? _selectedTrack;
+    private bool _isAudioBrowserVisible = true;
     private bool _isPlaying;
     private string _statusMessage = "Bereit";
     private double _masterVolume = 0.8;
@@ -145,6 +146,10 @@ public class MainViewModel : INotifyPropertyChanged
         EditMenuViewModel = new EditMenuViewModel(this);
         AudioBrowserVm   = new AudioBrowserViewModel();
         AudioBrowserVm.FileRequestedForPlaylist += (_, path) => AddFilesAsTrack([path]);
+        
+        // View menu
+        ToggleAudioBrowserCommand = new RelayCommand(() => IsAudioBrowserVisible = !IsAudioBrowserVisible);
+        BuildAnsichtMenu();
         
         // No default tracks - start with empty project
         _trackCounter = 0;
@@ -259,6 +264,25 @@ public class MainViewModel : INotifyPropertyChanged
     /// <see cref="AddFilesAsTrack"/> to load it into the Playlist.
     /// </summary>
     public AudioBrowserViewModel AudioBrowserVm { get; private set; } = null!;
+
+    public bool IsAudioBrowserVisible
+    {
+        get => _isAudioBrowserVisible;
+        set => SetField(ref _isAudioBrowserVisible, value);
+    }
+
+    public ICommand ToggleAudioBrowserCommand { get; private set; } = null!;
+    public ObservableCollection<MenuItemViewModel> AnsichtMenuItems { get; } = [];
+
+    private void BuildAnsichtMenu()
+    {
+        AnsichtMenuItems.Add(new MenuItemViewModel(new MenuItemModel
+        {
+            Header = "Audio Browser",
+            Command = ToggleAudioBrowserCommand,
+            InputGestureText = "Ctrl+B"
+        }));
+    }
 
     public Track? SelectedTrack
     {

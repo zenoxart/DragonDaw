@@ -210,12 +210,62 @@ Background="#0D1117">
                 <!-- Snap controls -->
                 <TextBlock Text="SNAP" Foreground="#445566" FontSize="10"
                            VerticalAlignment="Center" Margin="0,0,6,0"/>
-                <Button Content="1/4"  Command="{Binding SnapQuarterCommand}"
-                        Style="{StaticResource ArrangeBtn}" ToolTip="Viertelnote"/>
-                <Button Content="1/8"  Command="{Binding SnapEighthCommand}"
-                        Style="{StaticResource ArrangeBtn}" ToolTip="Achtelnote"/>
-                <Button Content="1/16" Command="{Binding SnapSixteenthCommand}"
-                        Style="{StaticResource ArrangeBtn}" ToolTip="Sechzehntel"/>
+                <Border Background="#0D1117" CornerRadius="2" Padding="4,2" Margin="0,0,4,0" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding SnapDisplay}" Foreground="#E63946" FontSize="10" FontWeight="Bold"
+                               Width="28" TextAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <Button Content="OFF" Command="{Binding SnapOffCommand}" ToolTip="Snap aus">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource ArrangeBtn}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsSnapOff}" Value="True">
+                                    <Setter Property="Background" Value="#C41E3A"/>
+                                    <Setter Property="Foreground" Value="White"/>
+                                    <Setter Property="BorderBrush" Value="#E63946"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+                <Button Content="1/4"  Command="{Binding SnapQuarterCommand}" ToolTip="Viertelnote">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource ArrangeBtn}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsSnapQuarter}" Value="True">
+                                    <Setter Property="Background" Value="#C41E3A"/>
+                                    <Setter Property="Foreground" Value="White"/>
+                                    <Setter Property="BorderBrush" Value="#E63946"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+                <Button Content="1/8"  Command="{Binding SnapEighthCommand}" ToolTip="Achtelnote">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource ArrangeBtn}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsSnapEighth}" Value="True">
+                                    <Setter Property="Background" Value="#C41E3A"/>
+                                    <Setter Property="Foreground" Value="White"/>
+                                    <Setter Property="BorderBrush" Value="#E63946"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+                <Button Content="1/16" Command="{Binding SnapSixteenthCommand}" ToolTip="Sechzehntel">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource ArrangeBtn}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsSnapSixteenth}" Value="True">
+                                    <Setter Property="Background" Value="#C41E3A"/>
+                                    <Setter Property="Foreground" Value="White"/>
+                                    <Setter Property="BorderBrush" Value="#E63946"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
 
                 <Rectangle Width="1" Fill="#30363D" Margin="8,4"/>
 

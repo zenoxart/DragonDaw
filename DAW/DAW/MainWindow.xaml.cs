@@ -62,6 +62,9 @@ public partial class MainWindow : Window
                     if (_viewModel.EditMenuViewModel.SelectAllCommand.CanExecute(null))
                         _viewModel.EditMenuViewModel.SelectAllCommand.Execute(null);
                     e.Handled = true; return;
+                case Key.B:
+                    _viewModel.IsAudioBrowserVisible = !_viewModel.IsAudioBrowserVisible;
+                    e.Handled = true; return;
             }
         }
         

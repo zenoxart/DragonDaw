@@ -72,6 +72,7 @@ public sealed class ArrangementViewModel : INotifyPropertyChanged
         ZoomOutCommand = new RelayCommand(() => ZoomLevel = Math.Max(MinZoom, ZoomLevel / 1.25));
         ZoomResetCommand = new RelayCommand(() => ZoomLevel = 1.0);
 
+        SnapOffCommand           = new RelayCommand(() => SnapResolution = 0.0);
         SnapQuarterCommand       = new RelayCommand(() => SnapResolution = 1.0);
         SnapEighthCommand        = new RelayCommand(() => SnapResolution = 0.5);
         SnapSixteenthCommand     = new RelayCommand(() => SnapResolution = 0.25);
@@ -96,9 +97,11 @@ public sealed class ArrangementViewModel : INotifyPropertyChanged
     /// <summary>Converts a beat count to a pixel width with pixel snapping.</summary>
     public double BeatsToPixels(double beats) => Math.Round(beats * PixelsPerBeat);
 
-    /// <summary>Snaps a beat value to the nearest snap-grid point.</summary>
+    /// <summary>Snaps a beat value to the nearest snap-grid point. Returns unmodified beat when snap is off.</summary>
     public double SnapToBeat(double beat) =>
-        Math.Round(beat / SnapResolution) * SnapResolution;
+        SnapResolution > 0
+            ? Math.Round(beat / SnapResolution) * SnapResolution
+            : beat;
 
     // ── Zoom ───────────────────────────────────────────────────────────────────
     public double ZoomLevel
@@ -121,8 +124,30 @@ public sealed class ArrangementViewModel : INotifyPropertyChanged
     public double SnapResolution
     {
         get => _snapResolution;
-        set => SetField(ref _snapResolution, value);
+        set
+        {
+            if (!SetField(ref _snapResolution, value)) return;
+            OnPropertyChanged(nameof(SnapDisplay));
+            OnPropertyChanged(nameof(IsSnapOff));
+            OnPropertyChanged(nameof(IsSnapQuarter));
+            OnPropertyChanged(nameof(IsSnapEighth));
+            OnPropertyChanged(nameof(IsSnapSixteenth));
+        }
     }
+
+    public string SnapDisplay => _snapResolution switch
+    {
+        0.0 => "OFF",
+        1.0 => "1/4",
+        0.5 => "1/8",
+        0.25 => "1/16",
+        _ => $"{_snapResolution:F2}"
+    };
+
+    public bool IsSnapOff => _snapResolution == 0.0;
+    public bool IsSnapQuarter => _snapResolution == 1.0;
+    public bool IsSnapEighth => _snapResolution == 0.5;
+    public bool IsSnapSixteenth => _snapResolution == 0.25;
 
     // ── Playhead ───────────────────────────────────────────────────────────────
     public double PlayheadBeat
@@ -181,6 +206,7 @@ public sealed class ArrangementViewModel : INotifyPropertyChanged
     public ICommand ZoomInCommand      { get; }
     public ICommand ZoomOutCommand     { get; }
     public ICommand ZoomResetCommand   { get; }
+    public ICommand SnapOffCommand        { get; }
     public ICommand SnapQuarterCommand   { get; }
     public ICommand SnapEighthCommand    { get; }
     public ICommand SnapSixteenthCommand { get; }

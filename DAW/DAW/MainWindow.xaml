@@ -17,139 +17,113 @@ mc:Ignorable="d"
     Drop="Window_Drop"
     DragOver="Window_DragOver"
     KeyDown="Window_KeyDown">
-    
-<Window.Resources>
-<!-- Converters -->
-<converters:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
-    
-<!-- Hierarchical DataTemplate for MenuItemViewModel -->
-<HierarchicalDataTemplate DataType="{x:Type vm:MenuItemViewModel}"
-                          ItemsSource="{Binding Children}">
-    <DockPanel>
-        <!-- Icon -->
-        <TextBlock x:Name="IconBlock"
-                   DockPanel.Dock="Left"
-                   Text="{Binding Icon}"
-                   Margin="0,0,8,0"
-                   VerticalAlignment="Center"
-                   FontSize="14"
-                   Visibility="{Binding Icon, Converter={StaticResource StringToVisibilityConverter}}" />
-            
-        <!-- Header Text -->
-        <TextBlock x:Name="HeaderBlock"
-                   Text="{Binding Header}"
-                   VerticalAlignment="Center" />
-            
-        <!-- Shortcut Text -->
-        <TextBlock x:Name="ShortcutBlock"
-                   DockPanel.Dock="Right"
-                   Text="{Binding InputGestureText}"
-                   Margin="20,0,0,0"
-                   VerticalAlignment="Center"
-                   Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                   FontSize="11"
-                   Visibility="{Binding InputGestureText, Converter={StaticResource StringToVisibilityConverter}}" />
-    </DockPanel>
-        
-    <HierarchicalDataTemplate.Triggers>
-        <!-- Separator style -->
-        <DataTrigger Binding="{Binding IsSeparator}" Value="True">
-            <Setter TargetName="IconBlock" Property="Visibility" Value="Collapsed" />
-            <Setter TargetName="HeaderBlock" Property="Visibility" Value="Collapsed" />
-            <Setter TargetName="ShortcutBlock" Property="Visibility" Value="Collapsed" />
-        </DataTrigger>
-    </HierarchicalDataTemplate.Triggers>
-</HierarchicalDataTemplate>
 
-<!-- Menu Item Container Style -->
-<Style x:Key="DynamicMenuItemStyle" TargetType="{x:Type MenuItem}">
-    <Setter Property="Header" Value="{Binding}"/>
-    <Setter Property="Command" Value="{Binding Command}"/>
-    <Setter Property="CommandParameter" Value="{Binding CommandParameter}"/>
-    <Setter Property="IsEnabled" Value="{Binding IsEnabled}"/>
-    <Setter Property="IsChecked" Value="{Binding IsChecked}"/>
-    <Setter Property="InputGestureText" Value="{Binding InputGestureText}"/>
-    <Setter Property="Background" Value="#21262D"/>
-    <Setter Property="Foreground" Value="#DDD"/>
-    <Setter Property="BorderBrush" Value="#30363D"/>
-    
-    <Setter Property="Template">
-        <Setter.Value>
-            <ControlTemplate TargetType="{x:Type MenuItem}">
-                <Border x:Name="Border" Background="{TemplateBinding Background}" 
-                        BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" 
-                        CornerRadius="2" Margin="1">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" SharedSizeGroup="Icon"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto" SharedSizeGroup="Shortcut"/>
-                            <ColumnDefinition Width="13"/>
-                        </Grid.ColumnDefinitions>
-                        
-                        <ContentPresenter Grid.Column="0" x:Name="Icon" Margin="6,0,6,0" VerticalAlignment="Center" 
-                                          ContentSource="Icon" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
-                        
-                        <ContentPresenter Grid.Column="1" ContentSource="Header" Margin="6,2" 
-                                          RecognizesAccessKey="True" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
-                        
-                        <TextBlock Grid.Column="2" x:Name="InputGestureText" Text="{TemplateBinding InputGestureText}" 
-                                   Margin="5,2,0,2" DockPanel.Dock="Right" Foreground="#999"/>
-                        
-                        <Path Grid.Column="3" x:Name="ArrowPanel" Margin="0,1,0,1" Fill="{TemplateBinding Foreground}" 
-                              VerticalAlignment="Center" Data="M 0,0 L 0,7 L 4,3.5 Z" Visibility="Collapsed"/>
-                        
-                        <Popup x:Name="SubMenuPopup" Placement="Right" IsOpen="{Binding Path=IsSubmenuOpen,RelativeSource={RelativeSource TemplatedParent}}" 
-                               Focusable="false" PopupAnimation="Fade">
-                            <Border Background="#21262D" BorderBrush="#30363D" BorderThickness="1">
-                                <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
-                            </Border>
-                        </Popup>
-                    </Grid>
-                </Border>
-                
-                <ControlTemplate.Triggers>
-                    <Trigger Property="IsHighlighted" Value="true">
-                        <Setter TargetName="Border" Property="Background" Value="#C41E3A"/>
-                        <Setter Property="Foreground" Value="White"/>
-                    </Trigger>
-                    
-                    <Trigger Property="IsEnabled" Value="false">
-                        <Setter Property="Foreground" Value="#666"/>
-                    </Trigger>
-                    
-                    <Trigger Property="HasItems" Value="true">
-                        <Setter TargetName="ArrowPanel" Property="Visibility" Value="Visible"/>
-                    </Trigger>
-                </ControlTemplate.Triggers>
-            </ControlTemplate>
-        </Setter.Value>
-    </Setter>
-        
-    <!-- Separator Style -->
-    <Style.Triggers>
-        <DataTrigger Binding="{Binding IsSeparator}" Value="True">
+    <Window.Resources>
+        <!-- Converters -->
+        <converters:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <!-- Hierarchical DataTemplate for MenuItemViewModel -->
+        <HierarchicalDataTemplate DataType="{x:Type vm:MenuItemViewModel}"
+                          ItemsSource="{Binding Children}">
+            <TextBlock x:Name="HeaderBlock" Text="{Binding Header}" VerticalAlignment="Center"/>
+            <HierarchicalDataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsSeparator}" Value="True">
+                    <Setter TargetName="HeaderBlock" Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+            </HierarchicalDataTemplate.Triggers>
+        </HierarchicalDataTemplate>
+
+        <!-- Menu Item Container Style -->
+        <Style x:Key="DynamicMenuItemStyle" TargetType="{x:Type MenuItem}">
+            <Setter Property="Header" Value="{Binding}"/>
+            <Setter Property="Command" Value="{Binding Command}"/>
+            <Setter Property="CommandParameter" Value="{Binding CommandParameter}"/>
+            <Setter Property="IsEnabled" Value="{Binding IsEnabled}"/>
+            <Setter Property="IsChecked" Value="{Binding IsChecked}"/>
+            <Setter Property="InputGestureText" Value="{Binding InputGestureText}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#C9D1D9"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="BorderThickness" Value="0"/>
+
             <Setter Property="Template">
                 <Setter.Value>
-                    <ControlTemplate>
-                        <Separator Style="{DynamicResource {x:Static MenuItem.SeparatorStyleKey}}" 
-                                   Background="#30363D" Height="1" Margin="2"/>
+                    <ControlTemplate TargetType="{x:Type MenuItem}">
+                        <Border x:Name="Border" Background="{TemplateBinding Background}" 
+                                Padding="10,6" Margin="2,0">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="14"/>
+                                </Grid.ColumnDefinitions>
+
+                                <ContentPresenter Grid.Column="0" ContentSource="Header"
+                                                  RecognizesAccessKey="True" VerticalAlignment="Center"
+                                                  SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+
+                                <TextBlock Grid.Column="1" x:Name="GestureText" 
+                                           Text="{TemplateBinding InputGestureText}" 
+                                           Foreground="#484F58" FontSize="11"
+                                           VerticalAlignment="Center" Margin="24,0,0,0"/>
+
+                                <Path Grid.Column="2" x:Name="ArrowPanel" Margin="6,0,0,0" Fill="#484F58" 
+                                      VerticalAlignment="Center" Data="M 0,0 L 0,7 L 4,3.5 Z" Visibility="Collapsed"/>
+
+                                <Popup x:Name="SubMenuPopup" Placement="Right" 
+                                       IsOpen="{Binding Path=IsSubmenuOpen,RelativeSource={RelativeSource TemplatedParent}}" 
+                                       Focusable="false" PopupAnimation="Fade" AllowsTransparency="True">
+                                    <Border Background="#1A1F26" BorderBrush="#2D333B" BorderThickness="1" 
+                                            CornerRadius="6" Padding="0,4" Margin="0,0,8,8">
+                                        <Border.Effect>
+                                            <DropShadowEffect ShadowDepth="2" BlurRadius="10" Opacity="0.5" Color="Black"/>
+                                        </Border.Effect>
+                                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                                    </Border>
+                                </Popup>
+                            </Grid>
+                        </Border>
+
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="true">
+                                <Setter TargetName="Border" Property="Background" Value="#252B37"/>
+                                <Setter Property="Foreground" Value="#FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="false">
+                                <Setter Property="Foreground" Value="#3D4450"/>
+                            </Trigger>
+                            <Trigger Property="HasItems" Value="true">
+                                <Setter TargetName="ArrowPanel" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
-        </DataTrigger>
-    </Style.Triggers>
-</Style>
-    
-<!-- Dragon Red & Black Theme -->
-<SolidColorBrush x:Key="AccentBrush" Color="#C41E3A"/>
-<SolidColorBrush x:Key="AccentLightBrush" Color="#E63946"/>
-<SolidColorBrush x:Key="AccentHoverBrush" Color="#F72735"/>
-<SolidColorBrush x:Key="GoldBrush" Color="#FFD60A"/>
-<SolidColorBrush x:Key="DarkBg" Color="#0D1117"/>
-<SolidColorBrush x:Key="PanelBg" Color="#161B22"/>
-<SolidColorBrush x:Key="ControlBg" Color="#21262D"/>
-        
+
+            <!-- Separator Style -->
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSeparator}" Value="True">
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate>
+                                <Border Height="1" Background="#2D333B" Margin="10,4"/>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Dragon Red & Black Theme -->
+        <SolidColorBrush x:Key="AccentBrush" Color="#C41E3A"/>
+        <SolidColorBrush x:Key="AccentLightBrush" Color="#E63946"/>
+        <SolidColorBrush x:Key="AccentHoverBrush" Color="#F72735"/>
+        <SolidColorBrush x:Key="GoldBrush" Color="#FFD60A"/>
+        <SolidColorBrush x:Key="DarkBg" Color="#0D1117"/>
+        <SolidColorBrush x:Key="PanelBg" Color="#161B22"/>
+        <SolidColorBrush x:Key="ControlBg" Color="#21262D"/>
+
         <!-- Toolbar Button Style -->
         <Style x:Key="ToolbarButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
@@ -179,7 +153,7 @@ mc:Ignorable="d"
                 </Setter.Value>
             </Setter>
         </Style>
-        
+
         <!-- Transport Button (Play/Stop/Pause) -->
         <Style x:Key="TransportButton" TargetType="Button">
             <Setter Property="Background" Value="#2D2D2D"/>
@@ -210,7 +184,7 @@ mc:Ignorable="d"
                 </Setter.Value>
             </Setter>
         </Style>
-        
+
         <!-- Play Button (Green) -->
         <Style x:Key="PlayButton" TargetType="Button" BasedOn="{StaticResource TransportButton}">
             <Style.Triggers>
@@ -219,7 +193,7 @@ mc:Ignorable="d"
                 </Trigger>
             </Style.Triggers>
         </Style>
-        
+
         <!-- Stop Button (Dragon Red) -->
         <Style x:Key="StopButton" TargetType="Button" BasedOn="{StaticResource TransportButton}">
             <Style.Triggers>
@@ -228,7 +202,7 @@ mc:Ignorable="d"
                 </Trigger>
             </Style.Triggers>
         </Style>
-        
+
         <!-- Tab Style - Dragon style -->
         <Style x:Key="FLTab" TargetType="TabItem">
             <Setter Property="Background" Value="Transparent"/>
@@ -262,46 +236,93 @@ mc:Ignorable="d"
             </Setter>
         </Style>
     </Window.Resources>
-    
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
-        
+
         <!-- ═══ UNIFIED TOOLBAR ═══ -->
         <Border Grid.Row="0" Background="#161B22" BorderBrush="#30363D" BorderThickness="0,0,0,1">
             <Grid>
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/> <!-- Menu + Transport + Master -->
+                    <RowDefinition Height="Auto"/>
+                    <!-- Menu + Transport + Master -->
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/> <!-- Logo + Menu -->
-                    <ColumnDefinition Width="Auto"/> <!-- Separator -->
-                    <ColumnDefinition Width="Auto"/> <!-- Transport -->
-                    <ColumnDefinition Width="Auto"/> <!-- Separator -->
-                    <ColumnDefinition Width="Auto"/> <!-- Tools -->
-                    <ColumnDefinition Width="Auto"/> <!-- Separator -->
-                    <ColumnDefinition Width="Auto"/> <!-- Toggles -->
-                    <ColumnDefinition Width="*"/>    <!-- Flex -->
-                    <ColumnDefinition Width="Auto"/> <!-- Master + Info -->
+                    <ColumnDefinition Width="Auto"/>
+                    <!-- Logo + Menu -->
+                    <ColumnDefinition Width="Auto"/>
+                    <!-- Separator -->
+                    <ColumnDefinition Width="Auto"/>
+                    <!-- Transport -->
+                    <ColumnDefinition Width="Auto"/>
+                    <!-- Separator -->
+                    <ColumnDefinition Width="47*"/>
+                    <!-- Toggles -->
+                    <ColumnDefinition Width="272*"/>
+                    <!-- Flex -->
+                    <ColumnDefinition Width="Auto"/>
+                    <!-- Master + Info -->
                 </Grid.ColumnDefinitions>
 
                 <!-- Logo + File Menu -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="🐉" FontSize="15" Foreground="#C41E3A" VerticalAlignment="Center" Margin="8,0,2,0"/>
-                    <Menu Background="Transparent" Foreground="#DDD" VerticalAlignment="Center">
+                    <Menu Background="Transparent" VerticalAlignment="Center">
+                        <Menu.Resources>
+                            <Style TargetType="MenuItem">
+                                <Setter Property="Foreground" Value="#8B949E"/>
+                                <Setter Property="FontSize" Value="11"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="MenuItem">
+                                            <Border x:Name="Bd" Background="Transparent" CornerRadius="3" Padding="8,5">
+                                                <Grid>
+                                                    <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center"/>
+                                                    <Popup x:Name="PART_Popup" Placement="Bottom"
+                                                           IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                                                           Focusable="false" PopupAnimation="Fade" AllowsTransparency="True">
+                                                        <Border Background="#1A1F26" BorderBrush="#2D333B" BorderThickness="1"
+                                                                CornerRadius="6" Padding="0,4" Margin="0,2,8,8">
+                                                            <Border.Effect>
+                                                                <DropShadowEffect ShadowDepth="2" BlurRadius="10" Opacity="0.5" Color="Black"/>
+                                                            </Border.Effect>
+                                                            <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                                                        </Border>
+                                                    </Popup>
+                                                </Grid>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsHighlighted" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="#252B37"/>
+                                                    <Setter Property="Foreground" Value="#FFFFFF"/>
+                                                </Trigger>
+                                                <Trigger Property="IsSubmenuOpen" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="#252B37"/>
+                                                    <Setter Property="Foreground" Value="#FFFFFF"/>
+                                                </Trigger>
+                                                <Trigger Property="IsEnabled" Value="False">
+                                                    <Setter Property="Foreground" Value="#3D4450"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </Menu.Resources>
                         <MenuItem Header="Datei" 
                                   ItemsSource="{Binding FileMenuViewModel.FileMenuItems}"
-                                  ItemContainerStyle="{StaticResource DynamicMenuItemStyle}"
-                                  Padding="6,5" FontSize="11"/>
+                                  ItemContainerStyle="{StaticResource DynamicMenuItemStyle}"/>
                         <MenuItem Header="Bearbeiten" 
                                   ItemsSource="{Binding EditMenuViewModel.EditMenuItems}"
-                                  ItemContainerStyle="{StaticResource DynamicMenuItemStyle}"
-                                  Padding="6,5" FontSize="11"/>
-                        <MenuItem Header="Ansicht" IsEnabled="False" Padding="6,5" FontSize="11"/>
-                        <MenuItem Header="Hilfe" IsEnabled="False" Padding="6,5" FontSize="11"/>
+                                  ItemContainerStyle="{StaticResource DynamicMenuItemStyle}"/>
+                        <MenuItem Header="Ansicht"
+                                  ItemsSource="{Binding AnsichtMenuItems}"
+                                  ItemContainerStyle="{StaticResource DynamicMenuItemStyle}"/>
+                        <MenuItem Header="Hilfe" IsEnabled="False"/>
                     </Menu>
                 </StackPanel>
 
@@ -331,120 +352,8 @@ mc:Ignorable="d"
 
                 <Rectangle Grid.Column="3" Width="1" Fill="#30363D" Margin="4,7"/>
 
-                <!-- Edit Tools (compact toggles) -->
-                <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" Margin="2,0"
-                            DataContext="{Binding GlobalToolbar}">
-                    <ToggleButton Content="📍" Width="26" Height="22" FontSize="10" Padding="0"
-                                  IsChecked="{Binding IsSelectToolActive, Mode=OneWay}" Command="{Binding SelectToolCommand}"
-                                  ToolTip="Auswahl (S)">
-                        <ToggleButton.Style>
-                            <Style TargetType="ToggleButton">
-                                <Setter Property="Background" Value="#21262D"/>
-                                <Setter Property="Foreground" Value="#AABBCC"/>
-                                <Setter Property="BorderBrush" Value="#30363D"/>
-                                <Setter Property="BorderThickness" Value="1"/>
-                                <Setter Property="Cursor" Value="Hand"/>
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="ToggleButton">
-                                            <Border x:Name="Bd" Background="{TemplateBinding Background}"
-                                                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="3"
-                                                    Padding="2">
-                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="Bd" Property="Background" Value="#2D3748"/>
-                                                    <Setter TargetName="Bd" Property="BorderBrush" Value="#C41E3A"/>
-                                                </Trigger>
-                                                <Trigger Property="IsChecked" Value="True">
-                                                    <Setter TargetName="Bd" Property="Background" Value="#C41E3A"/>
-                                                    <Setter TargetName="Bd" Property="BorderBrush" Value="#E63946"/>
-                                                    <Setter Property="Foreground" Value="White"/>
-                                                </Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                            </Style>
-                        </ToggleButton.Style>
-                    </ToggleButton>
-                    <ToggleButton Content="✏" Width="26" Height="22" FontSize="10" Padding="0"
-                                  IsChecked="{Binding IsDrawToolActive, Mode=OneWay}" Command="{Binding DrawToolCommand}"
-                                  ToolTip="Zeichnen (D)">
-                        <ToggleButton.Style>
-                            <Style TargetType="ToggleButton">
-                                <Setter Property="Background" Value="#21262D"/>
-                                <Setter Property="Foreground" Value="#AABBCC"/>
-                                <Setter Property="BorderBrush" Value="#30363D"/>
-                                <Setter Property="BorderThickness" Value="1"/>
-                                <Setter Property="Cursor" Value="Hand"/>
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="ToggleButton">
-                                            <Border x:Name="Bd" Background="{TemplateBinding Background}"
-                                                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="3"
-                                                    Padding="2">
-                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="Bd" Property="Background" Value="#2D3748"/>
-                                                    <Setter TargetName="Bd" Property="BorderBrush" Value="#C41E3A"/>
-                                                </Trigger>
-                                                <Trigger Property="IsChecked" Value="True">
-                                                    <Setter TargetName="Bd" Property="Background" Value="#C41E3A"/>
-                                                    <Setter TargetName="Bd" Property="BorderBrush" Value="#E63946"/>
-                                                    <Setter Property="Foreground" Value="White"/>
-                                                </Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                            </Style>
-                        </ToggleButton.Style>
-                    </ToggleButton>
-                    <ToggleButton Content="✂" Width="26" Height="22" FontSize="10" Padding="0"
-                                  IsChecked="{Binding IsSliceToolActive, Mode=OneWay}" Command="{Binding SliceToolCommand}"
-                                  ToolTip="Schnitt (C)">
-                        <ToggleButton.Style>
-                            <Style TargetType="ToggleButton">
-                                <Setter Property="Background" Value="#21262D"/>
-                                <Setter Property="Foreground" Value="#AABBCC"/>
-                                <Setter Property="BorderBrush" Value="#30363D"/>
-                                <Setter Property="BorderThickness" Value="1"/>
-                                <Setter Property="Cursor" Value="Hand"/>
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="ToggleButton">
-                                            <Border x:Name="Bd" Background="{TemplateBinding Background}"
-                                                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="3"
-                                                    Padding="2">
-                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="Bd" Property="Background" Value="#2D3748"/>
-                                                    <Setter TargetName="Bd" Property="BorderBrush" Value="#C41E3A"/>
-                                                </Trigger>
-                                                <Trigger Property="IsChecked" Value="True">
-                                                    <Setter TargetName="Bd" Property="Background" Value="#C41E3A"/>
-                                                    <Setter TargetName="Bd" Property="BorderBrush" Value="#E63946"/>
-                                                    <Setter Property="Foreground" Value="White"/>
-                                                </Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                            </Style>
-                        </ToggleButton.Style>
-                    </ToggleButton>
-                </StackPanel>
-
-                <Rectangle Grid.Column="5" Width="1" Fill="#30363D" Margin="4,7"/>
-
                 <!-- Toggles -->
-                <StackPanel Grid.Column="6" Orientation="Horizontal" VerticalAlignment="Center" Margin="2,0"
+                <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" Margin="2,0"
                             DataContext="{Binding GlobalToolbar}">
                     <ToggleButton Content="MON" Width="32" Height="22" FontSize="8" Padding="0"
                                   IsChecked="{Binding IsMonitoringEnabled, Mode=OneWay}" Command="{Binding ToggleMonitoringCommand}"
@@ -514,44 +423,10 @@ mc:Ignorable="d"
                             </Style>
                         </ToggleButton.Style>
                     </ToggleButton>
-                    <!-- Audio Browser toggle -->
-                    <ToggleButton x:Name="AudioBrowserToggle" Content="📁" Width="26" Height="22" FontSize="10" Padding="0"
-                                  IsChecked="True" ToolTip="Audio Browser ein/aus">
-                        <ToggleButton.Style>
-                            <Style TargetType="ToggleButton">
-                                <Setter Property="Background" Value="#21262D"/>
-                                <Setter Property="Foreground" Value="#AABBCC"/>
-                                <Setter Property="BorderBrush" Value="#30363D"/>
-                                <Setter Property="BorderThickness" Value="1"/>
-                                <Setter Property="Cursor" Value="Hand"/>
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="ToggleButton">
-                                            <Border x:Name="Bd" Background="{TemplateBinding Background}"
-                                                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="3"
-                                                    Padding="2">
-                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="Bd" Property="Background" Value="#2D3748"/>
-                                                </Trigger>
-                                                <Trigger Property="IsChecked" Value="True">
-                                                    <Setter TargetName="Bd" Property="Background" Value="#4CAF50"/>
-                                                    <Setter TargetName="Bd" Property="BorderBrush" Value="#66BB6A"/>
-                                                    <Setter Property="Foreground" Value="White"/>
-                                                </Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                            </Style>
-                        </ToggleButton.Style>
-                    </ToggleButton>
                 </StackPanel>
 
                 <!-- Right: Master Volume + Track Count -->
-                <StackPanel Grid.Column="8" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
+                <StackPanel Grid.Column="6" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
                     <Border Background="#0D1117" CornerRadius="3" Padding="6,3" VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="MST" Foreground="#556677" FontSize="8" VerticalAlignment="Center" Margin="0,0,4,0"/>
@@ -570,51 +445,33 @@ mc:Ignorable="d"
                 </StackPanel>
             </Grid>
         </Border>
-        
+
         <!-- View Tabs and Main Content -->
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition x:Name="AudioBrowserColumn" Width="280"/>
+                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
-            
+
             <!-- Audio Browser Dock (collapsible) -->
-            <Border Grid.Column="0" 
+            <Border Grid.Column="0" Width="280"
                     Background="#0D1117" 
                     BorderBrush="#30363D" 
-                    BorderThickness="0,0,1,0">
-                <Border.Style>
-                    <Style TargetType="Border">
-                        <Setter Property="Visibility" Value="Visible"/>
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsChecked, ElementName=AudioBrowserToggle}" Value="False">
-                                <Setter Property="Visibility" Value="Collapsed"/>
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </Border.Style>
+                    BorderThickness="0,0,1,0"
+                    Visibility="{Binding IsAudioBrowserVisible, Converter={StaticResource BoolToVis}}">
                 <browser:AudioBrowserView DataContext="{Binding AudioBrowserVm}"/>
             </Border>
-            
+
             <!-- Splitter -->
             <GridSplitter Grid.Column="1" 
                           Width="4" 
                           Background="#30363D" 
                           VerticalAlignment="Stretch"
                           HorizontalAlignment="Center"
-                          ResizeDirection="Columns">
-                <GridSplitter.Style>
-                    <Style TargetType="GridSplitter">
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsChecked, ElementName=AudioBrowserToggle}" Value="False">
-                                <Setter Property="Visibility" Value="Collapsed"/>
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </GridSplitter.Style>
-            </GridSplitter>
-            
+                          ResizeDirection="Columns"
+                          Visibility="{Binding IsAudioBrowserVisible, Converter={StaticResource BoolToVis}}"/>
+
             <!-- Main Content Tabs -->
             <Border Grid.Column="2" Background="#0D1117">
                 <TabControl x:Name="MainTabControl" 
@@ -641,7 +498,7 @@ mc:Ignorable="d"
                             </Setter>
                         </Style>
                     </TabControl.Resources>
-                    
+
                     <!-- PLAYLIST Tab -->
                     <TabItem Header="PLAYLIST" Style="{StaticResource FLTab}">
                         <arrangement:ArrangementView DataContext="{Binding ArrangementVm}"
@@ -649,7 +506,7 @@ mc:Ignorable="d"
                                                      Drop="Playlist_Drop"
                                                      DragOver="Window_DragOver"/>
                     </TabItem>
-                    
+
                     <!-- MIXER Tab -->
                     <TabItem Header="MIXER" Style="{StaticResource FLTab}">
                         <views:MixerView DataContext="{Binding}"/>
@@ -657,7 +514,7 @@ mc:Ignorable="d"
                 </TabControl>
             </Border>
         </Grid>
-        
+
         <!-- Status Bar -->
         <Border Grid.Row="2" Background="#0D1117" BorderBrush="#30363D" BorderThickness="0,1,0,0" Padding="10,3">
             <Grid>

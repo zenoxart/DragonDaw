@@ -330,6 +330,59 @@ public sealed class EditMenuViewModel : INotifyPropertyChanged
                 Icon = "☐",
                 InputGestureText = "Ctrl+A"
             }));
+
+            EditMenuItems.Add(new MenuItemViewModel(new MenuItemModel { IsSeparator = true }));
+
+            // ── Edit Tools ──
+            var toolbar = _mainVm.GlobalToolbar;
+
+            EditMenuItems.Add(new MenuItemViewModel(new MenuItemModel
+            {
+                Header = "Auswahl-Tool",
+                Command = toolbar.SelectToolCommand,
+                Icon = "📍",
+                InputGestureText = "S"
+            }));
+
+            EditMenuItems.Add(new MenuItemViewModel(new MenuItemModel
+            {
+                Header = "Zeichen-Tool",
+                Command = toolbar.DrawToolCommand,
+                Icon = "✏",
+                InputGestureText = "D"
+            }));
+
+            EditMenuItems.Add(new MenuItemViewModel(new MenuItemModel
+            {
+                Header = "Pinsel-Tool",
+                Command = toolbar.PaintToolCommand,
+                Icon = "🖌",
+                InputGestureText = "P"
+            }));
+
+            EditMenuItems.Add(new MenuItemViewModel(new MenuItemModel
+            {
+                Header = "Schnitt-Tool",
+                Command = toolbar.SliceToolCommand,
+                Icon = "✂",
+                InputGestureText = "C"
+            }));
+
+            EditMenuItems.Add(new MenuItemViewModel(new MenuItemModel
+            {
+                Header = "Größe-Tool",
+                Command = toolbar.ResizeToolCommand,
+                Icon = "↔",
+                InputGestureText = "R"
+            }));
+
+            EditMenuItems.Add(new MenuItemViewModel(new MenuItemModel
+            {
+                Header = "Zoom-Tool",
+                Command = toolbar.ZoomToolCommand,
+                Icon = "🔍",
+                InputGestureText = "Z"
+            }));
         });
     }
 
