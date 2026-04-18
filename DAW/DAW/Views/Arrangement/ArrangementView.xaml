@@ -45,15 +45,26 @@ Background="#0D1117">
         <DataTemplate x:Key="TrackHeaderTemplate"
                       DataType="{x:Type vm:ArrangementTrackViewModel}">
             <Border Height="{Binding DataContext.CurrentTrackHeight, RelativeSource={RelativeSource AncestorType=local:ArrangementView}}"
-                    Background="#161B22"
                     BorderBrush="#21262D"
-                    BorderThickness="0,0,0,1">
+                    BorderThickness="0,0,0,1"
+                    Cursor="Hand">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Background" Value="#161B22"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                <Setter Property="Background" Value="#1C2333"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
                 <Border.InputBindings>
+                    <MouseBinding Gesture="LeftClick" Command="{Binding SelectTrackCommand}"/>
                     <MouseBinding Gesture="RightClick" Command="{Binding DeleteTrackCommand}"/>
                 </Border.InputBindings>
                 <Grid Margin="4,0">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="4"/>   <!-- color strip -->
+                        <ColumnDefinition Width="6"/>   <!-- color strip (clickable) -->
                         <ColumnDefinition Width="12"/>  <!-- LED -->
                         <ColumnDefinition Width="*"/>   <!-- name -->
                         <ColumnDefinition Width="18"/>  <!-- X -->
@@ -61,12 +72,73 @@ Background="#0D1117">
                         <ColumnDefinition Width="22"/>  <!-- S -->
                     </Grid.ColumnDefinitions>
 
-                    <!-- Track colour strip -->
-                    <Rectangle Grid.Column="0" RadiusX="2" RadiusY="2" Margin="0,10">
-                        <Rectangle.Fill>
+                    <!-- Track colour strip (click to open palette) -->
+                    <Border Grid.Column="0" CornerRadius="2" Margin="0,8" Cursor="Hand">
+                        <Border.Background>
                             <SolidColorBrush Color="{Binding Color}"/>
-                        </Rectangle.Fill>
-                    </Rectangle>
+                        </Border.Background>
+                        <Border.InputBindings>
+                            <MouseBinding Gesture="LeftClick" Command="{Binding ToggleColorPaletteCommand}"/>
+                        </Border.InputBindings>
+                        <Border.ToolTip>Farbe ändern</Border.ToolTip>
+                    </Border>
+
+                    <!-- Color palette popup -->
+                    <Popup Grid.Column="0" 
+                           IsOpen="{Binding IsColorPaletteOpen}" 
+                           Placement="Right" 
+                           StaysOpen="False"
+                           AllowsTransparency="True"
+                           PopupAnimation="Fade">
+                        <Border Background="#1A1F26" BorderBrush="#2D333B" BorderThickness="1" 
+                                CornerRadius="6" Padding="8" Margin="4,0,8,8">
+                            <Border.Effect>
+                                <DropShadowEffect ShadowDepth="2" BlurRadius="10" Opacity="0.5" Color="Black"/>
+                            </Border.Effect>
+                            <StackPanel>
+                                <TextBlock Text="Track-Farbe" Foreground="#8B949E" FontSize="10" Margin="0,0,0,6"/>
+                                <ItemsControl ItemsSource="{Binding Source={x:Static vm:ArrangementTrackViewModel.TrackColorPalette}}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel Width="126"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Width="18" Height="18" CornerRadius="3" Margin="2" Cursor="Hand"
+                                                    BorderThickness="1" BorderBrush="#0D1117">
+                                                <Border.Background>
+                                                    <SolidColorBrush Color="{Binding}"/>
+                                                </Border.Background>
+                                                <Border.InputBindings>
+                                                    <MouseBinding Gesture="LeftClick" 
+                                                                  Command="{Binding DataContext.SetColorCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                  CommandParameter="{Binding}"/>
+                                                </Border.InputBindings>
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Style.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter Property="BorderBrush" Value="White"/>
+                                                            </Trigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </Popup>
+
+                    <!-- Selection indicator -->
+                    <Border Grid.Column="0" Width="2" HorizontalAlignment="Left" Margin="-4,6,-2,6" CornerRadius="1"
+                            Visibility="{Binding IsSelected, Converter={StaticResource BoolToVis}}">
+                        <Border.Background>
+                            <SolidColorBrush Color="#D4AF37"/>
+                        </Border.Background>
+                    </Border>
 
                     <!-- Activity LED -->
                     <Ellipse Grid.Column="1" Width="7" Height="7" Margin="2,0">
@@ -414,12 +486,21 @@ Background="#0D1117">
 
                             <!-- Lane row — click to add clip, clips float on Canvas -->
                             <Border Height="{Binding DataContext.CurrentTrackHeight, RelativeSource={RelativeSource AncestorType=local:ArrangementView}}"
-                                    Background="Transparent"
                                     BorderBrush="#151D2A"
                                     BorderThickness="0,0,0,1"
                                     UseLayoutRounding="True"
                                     SnapsToDevicePixels="True"
                                     MouseDown="TrackLane_MouseDown">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Background" Value="Transparent"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                <Setter Property="Background" Value="#0AFFFFFF"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
 
                                 <!-- Clip canvas for this track -->
                                 <ItemsControl ItemsSource="{Binding Clips}"

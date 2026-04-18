@@ -154,6 +154,10 @@ public partial class ArrangementView : UserControl
         if (Vm is null) return;
         if (sender is not Border { DataContext: ArrangementTrackViewModel trackVm } laneBorder) return;
 
+        // Select track (Ctrl = add to selection)
+        var isCtrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
+        Vm.SelectTrack(trackVm, isCtrl);
+
         // Ignore if the click landed on an existing clip (ClipControl handles those)
         if (!IsClickOnEmptyLane(e.OriginalSource as DependencyObject)) return;
 

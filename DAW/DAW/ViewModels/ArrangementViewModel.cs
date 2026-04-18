@@ -52,6 +52,7 @@ public sealed class ArrangementViewModel : INotifyPropertyChanged
     private double _playheadBeat;
     private double _snapResolution = 1.0;
     private ArrangementClipViewModel? _selectedClip;
+    private ArrangementTrackViewModel? _selectedTrack;
 
     public ArrangementViewModel(MainViewModel mainVm)
     {
@@ -200,6 +201,46 @@ public sealed class ArrangementViewModel : INotifyPropertyChanged
             SetField(ref _selectedClip, value);
             if (_selectedClip != null) _selectedClip.Model.IsSelected = true;
         }
+    }
+
+    public ArrangementTrackViewModel? SelectedTrack
+    {
+        get => _selectedTrack;
+        set
+        {
+            // Single-select: clear all, select one
+            ClearTrackSelection();
+            SetField(ref _selectedTrack, value);
+            if (_selectedTrack != null) _selectedTrack.IsSelected = true;
+        }
+    }
+
+    /// <summary>Selects a track. If <paramref name="addToSelection"/> is true (Ctrl+Click), toggles without clearing.</summary>
+    public void SelectTrack(ArrangementTrackViewModel track, bool addToSelection)
+    {
+        if (addToSelection)
+        {
+            track.IsSelected = !track.IsSelected;
+            // Update _selectedTrack to the last toggled-on track
+            if (track.IsSelected)
+                SetField(ref _selectedTrack, track);
+            else if (_selectedTrack == track)
+                SetField(ref _selectedTrack, Tracks.FirstOrDefault(t => t.IsSelected));
+        }
+        else
+        {
+            SelectedTrack = track; // single-select path
+        }
+    }
+
+    /// <summary>Returns all currently selected tracks.</summary>
+    public IEnumerable<ArrangementTrackViewModel> GetSelectedTracks() =>
+        Tracks.Where(t => t.IsSelected);
+
+    private void ClearTrackSelection()
+    {
+        foreach (var t in Tracks)
+            t.IsSelected = false;
     }
 
     // ── Commands ───────────────────────────────────────────────────────────────

@@ -18,6 +18,31 @@ public sealed class ArrangementTrackViewModel : INotifyPropertyChanged
     private readonly Track _track;
     private readonly ArrangementViewModel _arrangement;
     private bool _isActive;
+    private bool _isSelected;
+    private bool _isColorPaletteOpen;
+
+    /// <summary>Predefined color palette for track coloring.</summary>
+    public static Color[] TrackColorPalette { get; } =
+    [
+        Color.FromRgb(196, 30, 58),   // Dragon Red
+        Color.FromRgb(229, 57, 53),   // Red
+        Color.FromRgb(239, 108, 0),   // Deep Orange
+        Color.FromRgb(251, 140, 0),   // Orange
+        Color.FromRgb(255, 214, 10),  // Gold
+        Color.FromRgb(192, 202, 51),  // Lime
+        Color.FromRgb(76, 175, 80),   // Green
+        Color.FromRgb(0, 150, 136),   // Teal
+        Color.FromRgb(38, 166, 154),  // Teal Light
+        Color.FromRgb(30, 136, 229),  // Blue
+        Color.FromRgb(38, 97, 156),   // Lapis Blue
+        Color.FromRgb(91, 164, 230),  // Light Blue
+        Color.FromRgb(126, 87, 194),  // Purple
+        Color.FromRgb(171, 71, 188),  // Violet
+        Color.FromRgb(236, 64, 122),  // Pink
+        Color.FromRgb(120, 144, 156), // Blue Grey
+        Color.FromRgb(158, 158, 158), // Grey
+        Color.FromRgb(224, 224, 224), // Light Grey
+    ];
 
     public ArrangementTrackViewModel(Track track, ArrangementViewModel arrangement)
     {
@@ -43,6 +68,25 @@ public sealed class ArrangementTrackViewModel : INotifyPropertyChanged
         {
             _arrangement.RemoveTrack(this);
         });
+
+        SelectTrackCommand = new RelayCommand(() =>
+        {
+            var isCtrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
+            _arrangement.SelectTrack(this, isCtrl);
+        });
+
+        SetColorCommand = new RelayCommand<Color>(color =>
+        {
+            // Apply color to all selected tracks
+            foreach (var t in _arrangement.GetSelectedTracks())
+                t.Model.ChannelColor = color;
+            IsColorPaletteOpen = false;
+        });
+
+        ToggleColorPaletteCommand = new RelayCommand(() =>
+        {
+            IsColorPaletteOpen = !IsColorPaletteOpen;
+        });
     }
 
     public Track Model => _track;
@@ -59,9 +103,24 @@ public sealed class ArrangementTrackViewModel : INotifyPropertyChanged
         private set => SetField(ref _isActive, value);
     }
 
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set => SetField(ref _isSelected, value);
+    }
+
+    public bool IsColorPaletteOpen
+    {
+        get => _isColorPaletteOpen;
+        set => SetField(ref _isColorPaletteOpen, value);
+    }
+
     public ICommand ToggleMuteCommand { get; }
     public ICommand ToggleSoloCommand { get; }
     public ICommand DeleteTrackCommand { get; }
+    public ICommand SelectTrackCommand { get; }
+    public ICommand SetColorCommand { get; }
+    public ICommand ToggleColorPaletteCommand { get; }
 
     // ── Clip management ───────────────────────────────────────────────────────
 
