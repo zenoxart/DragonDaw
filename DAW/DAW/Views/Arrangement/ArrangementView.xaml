@@ -44,7 +44,7 @@ Background="#0D1117">
         <!-- Track header inline DataTemplate -->
         <DataTemplate x:Key="TrackHeaderTemplate"
                       DataType="{x:Type vm:ArrangementTrackViewModel}">
-            <Border Height="52"
+            <Border Height="{Binding DataContext.CurrentTrackHeight, RelativeSource={RelativeSource AncestorType=local:ArrangementView}}"
                     Background="#161B22"
                     BorderBrush="#21262D"
                     BorderThickness="0,0,0,1">
@@ -201,6 +201,9 @@ Background="#0D1117">
                         Style="{StaticResource ArrangeBtn}" Width="22" ToolTip="Hineinzoomen"/>
                 <Button Content="1:1" Command="{Binding ZoomResetCommand}"
                         Style="{StaticResource ArrangeBtn}" ToolTip="Zoom zurücksetzen"/>
+                <Button Content="↕" Command="{Binding ResetTrackHeightCommand}"
+                        Style="{StaticResource ArrangeBtn}" Width="22" 
+                        ToolTip="Track-Höhe zurücksetzen" FontSize="13"/>
 
                 <Rectangle Width="1" Fill="#30363D" Margin="8,4"/>
 
@@ -315,6 +318,9 @@ Background="#0D1117">
                       Background="#0D1117"
                       ScrollChanged="TimelineScrollView_ScrollChanged"
                       PreviewMouseWheel="TimelineScrollView_PreviewMouseWheel"
+                      PreviewMouseRightButtonDown="TimelineScrollView_PreviewMouseRightButtonDown"
+                      PreviewMouseMove="TimelineScrollView_PreviewMouseMove"
+                      PreviewMouseRightButtonUp="TimelineScrollView_PreviewMouseRightButtonUp"
                       UseLayoutRounding="True"
                       SnapsToDevicePixels="True"
                       SizeChanged="TimelineScrollView_SizeChanged"
@@ -337,7 +343,7 @@ Background="#0D1117">
                 <!-- ① Background grid (beat lines + track separators) -->
                 <local:PixelPerfectTimelineGridControl
                     PixelsPerBeat="{Binding PixelsPerBeat}"
-                    TrackHeight="52"
+                    TrackHeight="{Binding CurrentTrackHeight}"
                     TrackCount="{Binding Tracks.Count}"
                     BeatsPerBar="4"
                     IsHitTestVisible="False"/>
@@ -357,7 +363,7 @@ Background="#0D1117">
                         <DataTemplate DataType="{x:Type vm:ArrangementTrackViewModel}">
 
                             <!-- Lane row — click to add clip, clips float on Canvas -->
-                            <Border Height="52"
+                            <Border Height="{Binding DataContext.CurrentTrackHeight, RelativeSource={RelativeSource AncestorType=local:ArrangementView}}"
                                     Background="Transparent"
                                     BorderBrush="#151D2A"
                                     BorderThickness="0,0,0,1"
@@ -385,7 +391,7 @@ Background="#0D1117">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:ArrangementClipViewModel}">
                                             <local:ClipControl Width="{Binding PixelWidth}"
-                                                               Height="48"
+                                                               Height="{Binding DataContext.ClipHeight, RelativeSource={RelativeSource AncestorType=local:ArrangementView}}"
                                                                UseLayoutRounding="True"
                                                                SnapsToDevicePixels="True"/>
                                         </DataTemplate>
@@ -433,6 +439,19 @@ Background="#0D1117">
                                Fill="#E63946"
                                UseLayoutRounding="True"
                                SnapsToDevicePixels="True"/>
+                </Canvas>
+
+                <!-- ④ Zoom selection rectangle (Ctrl+RightClick drag) -->
+                <Canvas IsHitTestVisible="False"
+                        UseLayoutRounding="True"
+                        SnapsToDevicePixels="True">
+                    <Border x:Name="ZoomSelectionRect"
+                            Visibility="Collapsed"
+                            Background="#185BA4E6"
+                            BorderBrush="#5BA4E6"
+                            BorderThickness="1"
+                            CornerRadius="1"
+                            IsHitTestVisible="False"/>
                 </Canvas>
 
             </Grid>

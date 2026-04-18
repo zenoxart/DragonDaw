@@ -12,13 +12,21 @@ Background="#161B22">
         <!-- Lapis Blue -->
         <SolidColorBrush x:Key="AccentBrush" Color="#26619C"/>
         
+        <!-- Volume to meter height converter (same height as fader) -->
+        <local:VolumeToMeterHeightConverter x:Key="VolumeToHeight" MaxHeight="140"/>
+        <local:VolumeToMeterColorConverter x:Key="VolumeToColor"/>
+        <local:VolumeToDbFaderConverter x:Key="VolumeToDb"/>
+        
         <!-- Vertical Fader Style -->
         <Style x:Key="FLFader" TargetType="Slider">
             <Setter Property="Orientation" Value="Vertical"/>
-            <Setter Property="Minimum" Value="0"/>
-            <Setter Property="Maximum" Value="1"/>
+            <Setter Property="Minimum" Value="-60"/>
+            <Setter Property="Maximum" Value="6"/>
             <Setter Property="Height" Value="140"/>
             <Setter Property="Width" Value="24"/>
+            <Setter Property="TickFrequency" Value="6"/>
+            <Setter Property="SmallChange" Value="0.5"/>
+            <Setter Property="LargeChange" Value="3"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Slider">
@@ -29,15 +37,16 @@ Background="#161B22">
                                     <DropShadowEffect ShadowDepth="1" BlurRadius="2" Opacity="0.3"/>
                                 </Border.Effect>
                             </Border>
-                            <!-- Level indicator marks -->
-                            <StackPanel HorizontalAlignment="Left" Margin="-8,5,0,5" VerticalAlignment="Stretch">
-                                <Rectangle Height="1" Width="4" Fill="#444" Margin="0,0,0,13"/>
-                                <Rectangle Height="1" Width="4" Fill="#444" Margin="0,0,0,13"/>
-                                <Rectangle Height="1" Width="6" Fill="#5BA4E6" Margin="0,0,0,13"/>
-                                <Rectangle Height="1" Width="4" Fill="#444" Margin="0,0,0,13"/>
-                                <Rectangle Height="1" Width="4" Fill="#444" Margin="0,0,0,13"/>
-                                <Rectangle Height="1" Width="4" Fill="#444" Margin="0,0,0,13"/>
-                                <Rectangle Height="1" Width="4" Fill="#444"/>
+                            <!-- Level indicator marks (dB-linear, 8 marks at key dB levels) -->
+                            <StackPanel HorizontalAlignment="Left" Margin="-8,1,0,1" VerticalAlignment="Stretch">
+                                <Rectangle Height="1" Width="5" Fill="#F44" Margin="0,0,0,16.5" ToolTip="+6 dB"/>
+                                <Rectangle Height="1" Width="4" Fill="#C44" Margin="0,0,0,16.5" ToolTip="0 dB"/>
+                                <Rectangle Height="1" Width="5" Fill="#FFA500" Margin="0,0,0,16.5" ToolTip="-6 dB"/>
+                                <Rectangle Height="1" Width="4" Fill="#2ECC40" Margin="0,0,0,16.5" ToolTip="-12 dB"/>
+                                <Rectangle Height="1" Width="4" Fill="#444" Margin="0,0,0,16.5" ToolTip="-24 dB"/>
+                                <Rectangle Height="1" Width="4" Fill="#444" Margin="0,0,0,16.5" ToolTip="-36 dB"/>
+                                <Rectangle Height="1" Width="4" Fill="#444" Margin="0,0,0,16.5" ToolTip="-48 dB"/>
+                                <Rectangle Height="1" Width="4" Fill="#444" ToolTip="-60 dB"/>
                             </StackPanel>
                             <Track x:Name="PART_Track">
                                 <Track.Thumb>
@@ -207,13 +216,93 @@ Background="#161B22">
                            Margin="0,2,0,0"/>
             </StackPanel>
             
-            <!-- Volume Fader -->
-            <StackPanel Grid.Row="3" HorizontalAlignment="Center" VerticalAlignment="Center">
-                <Slider Value="{Binding Volume, Mode=TwoWay}" 
+            <!-- Volume Fader + dB Meter -->
+            <Grid Grid.Row="3" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="4"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Stereo dB Level Meter (left of fader) -->
+                <Border Grid.Column="0" Width="14" Height="140" Background="#0D1117" CornerRadius="2">
+                    <Grid>
+                        <!-- Static colored background zones (dB-scaled)
+                             140px over 66 dB range (−60 to +6):
+                             Red:    top  13px  (0 dB to +6 dB)
+                             Orange: mid  13px  (−6 dB to 0 dB)
+                             Green:  bot 114px  (−60 dB to −6 dB) -->
+                        <Grid VerticalAlignment="Bottom" Height="140">
+                            <Border VerticalAlignment="Bottom" Height="114" CornerRadius="0,0,2,2">
+                                <Border.Background>
+                                    <SolidColorBrush Color="#1A2E1A"/>
+                                </Border.Background>
+                            </Border>
+                            <Border VerticalAlignment="Bottom" Height="13" Margin="0,0,0,114">
+                                <Border.Background>
+                                    <SolidColorBrush Color="#2E2A1A"/>
+                                </Border.Background>
+                            </Border>
+                            <Border VerticalAlignment="Top" Height="13">
+                                <Border.Background>
+                                    <SolidColorBrush Color="#2E1A1A"/>
+                                </Border.Background>
+                            </Border>
+                        </Grid>
+
+                        <!-- L/R active level bars -->
+                        <Grid Margin="1,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="1"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Left channel -->
+                            <Border Grid.Column="0" VerticalAlignment="Bottom" CornerRadius="0,0,1,0"
+                                    Height="{Binding MeterLeft, Converter={StaticResource VolumeToHeight}}"
+                                    Background="{Binding MeterLeft, Converter={StaticResource VolumeToColor}}"/>
+
+                            <!-- Right channel -->
+                            <Border Grid.Column="2" VerticalAlignment="Bottom" CornerRadius="0,0,0,1"
+                                    Height="{Binding MeterRight, Converter={StaticResource VolumeToHeight}}"
+                                    Background="{Binding MeterRight, Converter={StaticResource VolumeToColor}}"/>
+                        </Grid>
+
+                        <!-- LED segment lines -->
+                        <Canvas IsHitTestVisible="False" ClipToBounds="True">
+                            <Rectangle Canvas.Top="4"  Width="14" Height="1" Fill="#0D1117" Opacity="0.5"/>
+                            <Rectangle Canvas.Top="14" Width="14" Height="1" Fill="#0D1117" Opacity="0.5"/>
+                            <Rectangle Canvas.Top="24" Width="14" Height="1" Fill="#0D1117" Opacity="0.5"/>
+                            <Rectangle Canvas.Top="34" Width="14" Height="1" Fill="#0D1117" Opacity="0.5"/>
+                            <Rectangle Canvas.Top="44" Width="14" Height="1" Fill="#0D1117" Opacity="0.5"/>
+                            <Rectangle Canvas.Top="54" Width="14" Height="1" Fill="#0D1117" Opacity="0.5"/>
+                            <Rectangle Canvas.Top="64" Width="14" Height="1" Fill="#0D1117" Opacity="0.5"/>
+                            <Rectangle Canvas.Top="74" Width="14" Height="1" Fill="#0D1117" Opacity="0.5"/>
+                            <Rectangle Canvas.Top="84" Width="14" Height="1" Fill="#0D1117" Opacity="0.5"/>
+                            <Rectangle Canvas.Top="94" Width="14" Height="1" Fill="#0D1117" Opacity="0.5"/>
+                            <Rectangle Canvas.Top="104" Width="14" Height="1" Fill="#0D1117" Opacity="0.5"/>
+                            <Rectangle Canvas.Top="114" Width="14" Height="1" Fill="#0D1117" Opacity="0.5"/>
+                            <Rectangle Canvas.Top="124" Width="14" Height="1" Fill="#0D1117" Opacity="0.5"/>
+                            <Rectangle Canvas.Top="134" Width="14" Height="1" Fill="#0D1117" Opacity="0.5"/>
+                        </Canvas>
+
+                        <!-- dB threshold marker at 0dB (13px from top) -->
+                        <Rectangle VerticalAlignment="Top" Margin="0,13,0,0" Height="1" 
+                                   Fill="#FF4136" Opacity="0.8"/>
+                        <!-- dB threshold marker at -6dB (26px from top) -->
+                        <Rectangle VerticalAlignment="Top" Margin="0,26,0,0" Height="1" 
+                                   Fill="#FFA500" Opacity="0.7"/>
+                    </Grid>
+                </Border>
+
+                <!-- Volume Fader in dB space (right of meter) -->
+                <Slider Grid.Column="2" 
+                        Value="{Binding Volume, Mode=TwoWay, Converter={StaticResource VolumeToDb}}" 
                         Style="{StaticResource FLFader}"
                         ToolTip="Rechtsklick = Zurücksetzen"
                         MouseRightButtonDown="Volume_ResetToDefault"/>
-            </StackPanel>
+            </Grid>
             
             <!-- dB Display -->
             <Border Grid.Row="4" Background="#0D1117" CornerRadius="2" Padding="4,2" Margin="4,4">
@@ -237,52 +326,21 @@ Background="#161B22">
                               ToolTip="Solo"/>
             </StackPanel>
             
-            <!-- Play Indicator / Peak Meter -->
-            <Border Grid.Row="6" Height="20" CornerRadius="2" Margin="4,4,4,2" Background="#0D1117">
-                <Grid>
-                    <!-- Level Meter Background -->
-                    <Border CornerRadius="2">
-                        <Border.Style>
-                            <Style TargetType="Border">
-                                <Setter Property="Background">
-                                    <Setter.Value>
-                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                            <GradientStop Color="#0D1117" Offset="0"/>
-                                            <GradientStop Color="#0D1117" Offset="1"/>
-                                        </LinearGradientBrush>
-                                    </Setter.Value>
-                                </Setter>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsPlaying}" Value="True">
-                                        <Setter Property="Background">
-                                            <Setter.Value>
-                                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                                    <GradientStop Color="#26619C" Offset="0"/>
-                                                    <GradientStop Color="#4A90D9" Offset="0.7"/>
-                                                    <GradientStop Color="#5BA4E6" Offset="0.85"/>
-                                                    <GradientStop Color="#D4AF37" Offset="1"/>
-                                                </LinearGradientBrush>
-                                            </Setter.Value>
-                                        </Setter>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Border.Style>
-                    </Border>
-                    <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="8" Foreground="#8899AA">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Text" Value=""/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsPlaying}" Value="True">
-                                        <Setter Property="Text" Value="▶ PLAY"/>
-                                        <Setter Property="Foreground" Value="White"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                </Grid>
+            <!-- Play Indicator -->
+            <Border Grid.Row="6" Height="18" CornerRadius="2" Margin="4,4,4,2" Background="#0D1117">
+                <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="8" Foreground="#8899AA">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Text" Value=""/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsPlaying}" Value="True">
+                                    <Setter Property="Text" Value="▶ PLAY"/>
+                                    <Setter Property="Foreground" Value="#5BA4E6"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
             </Border>
         </Grid>
     </Border>

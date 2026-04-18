@@ -35,7 +35,13 @@ public partial class CommandPalette : Window
             RefreshResults();
         };
         
-        Deactivated += (s, e) => Close();
+        Deactivated += (s, e) =>
+        {
+            if (DialogResult == null) // only auto-close if no result was set
+            {
+                try { DialogResult = false; } catch { }
+            }
+        };
     }
 
     private void RefreshResults()

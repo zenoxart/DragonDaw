@@ -358,6 +358,55 @@ namespace DAW.Views
             }
         }
         
+        /// <summary>
+        /// Opens the plugin window for an existing effect in a slot.
+        /// </summary>
+        private void OnSlotOpenPlugin(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            try
+            {
+                if (sender is not FrameworkElement element) return;
+                if (ViewModel?.SelectedTrack is not { } track) return;
+                
+                int? slotNumber = element.Tag switch
+                {
+                    int i => i,
+                    string s when int.TryParse(s, out var parsed) => parsed,
+                    _ => null
+                };
+                if (!slotNumber.HasValue) return;
+                
+                var slot = track.EffectSlots.FirstOrDefault(s => s.SlotNumber == slotNumber.Value);
+                if (slot?.Effect is not { } effect) return;
+                
+                // Find the matching plugin definition for the window title/icon
+                var pluginDef = Plugins.PluginManager.Instance.Plugins
+                    .FirstOrDefault(p => p.Name == effect.Name)
+                    ?? new Plugins.PluginDefinition
+                    {
+                        Id = effect.EffectType,
+                        Name = effect.Name,
+                        Category = "Effect",
+                        Icon = effect.Icon,
+                        Description = effect.Name,
+                        Factory = () => effect
+                    };
+                
+                var pluginWindow = new Plugins.PluginWindow(effect, pluginDef, track)
+                {
+                    Owner = Window.GetWindow(this),
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner
+                };
+                pluginWindow.Show();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Exception in OnSlotOpenPlugin: {ex}");
+                if (ViewModel != null)
+                    ViewModel.StatusMessage = $"✗ Fehler beim Öffnen des Plugins: {ex.Message}";
+            }
+        }
+        
         #endregion
         
         #region Plugin Search Methods
@@ -406,18 +455,6 @@ namespace DAW.Views
             try
             {
                 System.Diagnostics.Debug.WriteLine($"Opening plugin search for slot {slotNumber}");
-                
-                // Test: Try adding a known plugin directly first
-                var testPlugin = Plugins.PluginManager.Instance.Plugins.FirstOrDefault(p => p.Id == "lapis.eq");
-                if (testPlugin != null)
-                {
-                    System.Diagnostics.Debug.WriteLine($"Found test plugin: {testPlugin.Name}");
-                    AddEffectToSlot(testPlugin, slotNumber);
-                    return;
-                }
-                
-                // If no test plugin found, continue with CommandPalette
-                System.Diagnostics.Debug.WriteLine("No test plugin found, opening CommandPalette");
                 
                 var commandPalette = new Plugins.CommandPalette(ViewModel.SelectedTrack)
                 {

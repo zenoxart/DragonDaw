@@ -15,7 +15,6 @@ public class PluginWindow : Window
     public new AudioEffect Effect { get; }
     public PluginDefinition Definition { get; }
     public Track? TargetTrack { get; private set; }
-    private bool _effectAddedToTrack;
 
     public PluginWindow(AudioEffect effect, PluginDefinition definition, Track? targetTrack)
     {
@@ -25,26 +24,6 @@ public class PluginWindow : Window
 
         InitializeWindow();
         BuildUI();
-        
-        // Add effect to track after window is fully initialized
-        Loaded += OnWindowLoaded;
-    }
-
-    private void OnWindowLoaded(object sender, RoutedEventArgs e)
-    {
-        // Add the effect to the track's chain when window is loaded
-        if (TargetTrack != null && !_effectAddedToTrack)
-        {
-            try
-            {
-                TargetTrack.EffectChain.AddEffect(Effect);
-                _effectAddedToTrack = true;
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Failed to add effect: {ex.Message}");
-            }
-        }
     }
 
     private void InitializeWindow()
@@ -376,18 +355,6 @@ public class PluginWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
-        // Remove effect from track when window closes
-        if (TargetTrack != null && _effectAddedToTrack)
-        {
-            try
-            {
-                TargetTrack.EffectChain.RemoveEffect(Effect);
-            }
-            catch
-            {
-                // Ignore errors during cleanup
-            }
-        }
         base.OnClosed(e);
     }
 }

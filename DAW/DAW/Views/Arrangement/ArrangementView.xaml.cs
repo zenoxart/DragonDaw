@@ -30,6 +30,15 @@ public partial class ArrangementView : UserControl
     private DateTime _playbackStartTime;
     private double _playbackStartBeat;
 
+    // Ctrl+RightClick zoom selection
+    private bool _isZoomSelecting;
+    private Point _zoomSelectOrigin;      // origin in TimelineGrid coordinates
+    private double _zoomSelectOriginBeat; // beat at drag start
+    private double _previousZoomLevel;    // for zoom-out on simple click
+    private double _zoomSelectTrackHeightBefore; // track height at drag start
+
+    private Border? ZoomRect => FindName("ZoomSelectionRect") as Border;
+
     public ArrangementView()
     {
         InitializeComponent();
@@ -234,50 +243,67 @@ public partial class ArrangementView : UserControl
             System.Diagnostics.Debug.WriteLine($"Beat calculation: {beat:F2} -> snapped to {snappedBeat:F2}");
             
             // Determine which track was dropped on
-            var trackIndex = (int)(position.Y / 52); // 52 is track height
-            System.Diagnostics.Debug.WriteLine($"Calculated track index: {trackIndex} (Y={position.Y} / 52)");
-            
-            // Auto-create a new track if dropped outside existing tracks
-            var trackWasAutoCreated = false;
-            if (trackIndex < 0 || trackIndex >= Vm.Tracks.Count)
-            {
-                System.Diagnostics.Debug.WriteLine($"Track index out of range. Creating new track automatically.");
-                Vm.AddEmptyTrackCommand.Execute(null);
-                trackIndex = Vm.Tracks.Count - 1;
-                trackWasAutoCreated = true;
-                
-                if (trackIndex < 0)
-                {
-                    System.Diagnostics.Debug.WriteLine("ERROR: Failed to create new track.");
-                    return;
-                }
-            }
-            
-            var targetTrack = Vm.Tracks[trackIndex];
-            System.Diagnostics.Debug.WriteLine($"Target track: '{targetTrack.Name}'");
-            
-            string? audioFilePath = null;
+            var trackIndex = (int)(position.Y / Vm.CurrentTrackHeight);
+            System.Diagnostics.Debug.WriteLine($"Calculated track index: {trackIndex} (Y={position.Y} / {Vm.CurrentTrackHeight})");
 
-            // Handle file drop from external source
+
+            // Collect all audio file paths from the drop
+            var audioFilePaths = new List<string>();
+
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
                 var files = (string[])e.Data.GetData(DataFormats.FileDrop);
-                if (files != null && files.Length > 0)
+                if (files != null)
                 {
-                    audioFilePath = files[0];
-                    System.Diagnostics.Debug.WriteLine($"External file drop: {audioFilePath}");
+                    foreach (var file in files)
+                    {
+                        var ext = System.IO.Path.GetExtension(file);
+                        if (AudioAnalysisService.IsSupportedFormat(ext))
+                            audioFilePaths.Add(file);
+                    }
                 }
             }
-            // Handle drop from AudioBrowser
             else if (e.Data.GetDataPresent(typeof(AudioBrowserFileViewModel)))
             {
                 var audioFile = (AudioBrowserFileViewModel)e.Data.GetData(typeof(AudioBrowserFileViewModel));
-                audioFilePath = audioFile.FullPath;
-                System.Diagnostics.Debug.WriteLine($"AudioBrowser file drop: {audioFilePath}");
+                audioFilePaths.Add(audioFile.FullPath);
             }
 
-            if (!string.IsNullOrEmpty(audioFilePath))
+            if (audioFilePaths.Count == 0)
             {
+                System.Diagnostics.Debug.WriteLine("ERROR: No supported audio files found in drop data");
+                return;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"Processing {audioFilePaths.Count} audio file(s)");
+
+            // Process each file — one track per file
+            for (int i = 0; i < audioFilePaths.Count; i++)
+            {
+                var audioFilePath = audioFilePaths[i];
+                var currentTrackIndex = trackIndex + i;
+
+                System.Diagnostics.Debug.WriteLine($"File {i + 1}/{audioFilePaths.Count}: {System.IO.Path.GetFileName(audioFilePath)}");
+
+                // Auto-create a new track if needed
+                bool trackWasAutoCreated = false;
+                if (currentTrackIndex < 0 || currentTrackIndex >= Vm.Tracks.Count)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Track index {currentTrackIndex} out of range. Creating new track.");
+                    Vm.AddEmptyTrackCommand.Execute(null);
+                    currentTrackIndex = Vm.Tracks.Count - 1;
+                    trackWasAutoCreated = true;
+
+                    if (currentTrackIndex < 0)
+                    {
+                        System.Diagnostics.Debug.WriteLine("ERROR: Failed to create new track.");
+                        continue;
+                    }
+                }
+
+                var targetTrack = Vm.Tracks[currentTrackIndex];
+                System.Diagnostics.Debug.WriteLine($"Target track: '{targetTrack.Name}'");
+
                 // Rename auto-created track to match the audio file
                 if (trackWasAutoCreated)
                 {
@@ -289,27 +315,15 @@ public partial class ArrangementView : UserControl
                     targetTrack.Model.FilePath = audioFilePath;
                 }
 
-                var extension = System.IO.Path.GetExtension(audioFilePath);
-                if (AudioAnalysisService.IsSupportedFormat(extension))
-                {
-                    System.Diagnostics.Debug.WriteLine($"Creating audio clip for: {System.IO.Path.GetFileName(audioFilePath)}");
-                    System.Diagnostics.Debug.WriteLine($"Current BPM: {Vm.BPM}");
-                    
-                    var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-                    await targetTrack.AddAudioClipAtBeatAsync(snappedBeat, audioFilePath, Vm.BPM);
-                    stopwatch.Stop();
-                    
-                    System.Diagnostics.Debug.WriteLine($"Audio clip created successfully in {stopwatch.ElapsedMilliseconds}ms");
-                    System.Diagnostics.Debug.WriteLine($"Total clips in track: {targetTrack.Clips.Count}");
-                }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine($"ERROR: Unsupported format: {extension}");
-                }
-            }
-            else
-            {
-                System.Diagnostics.Debug.WriteLine("ERROR: No audio file path found in drop data");
+                System.Diagnostics.Debug.WriteLine($"Creating audio clip for: {System.IO.Path.GetFileName(audioFilePath)}");
+                System.Diagnostics.Debug.WriteLine($"Current BPM: {Vm.BPM}");
+
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                await targetTrack.AddAudioClipAtBeatAsync(snappedBeat, audioFilePath, Vm.BPM);
+                stopwatch.Stop();
+
+                System.Diagnostics.Debug.WriteLine($"Audio clip created successfully in {stopwatch.ElapsedMilliseconds}ms");
+                System.Diagnostics.Debug.WriteLine($"Total clips in track: {targetTrack.Clips.Count}");
             }
         }
         catch (Exception ex)
@@ -604,6 +618,168 @@ public partial class ArrangementView : UserControl
     }
 
     // ── Timeline click-to-seek functionality ──────────────────────────────────
+
+    // ── Ctrl+RightClick zoom (FL Studio style) ──────────────────────────────
+
+    /// <summary>
+    /// Ctrl+RightClick starts a zoom selection rectangle.
+    /// </summary>
+    private void TimelineScrollView_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (Vm is null) return;
+        if (!Keyboard.IsKeyDown(Key.LeftCtrl) && !Keyboard.IsKeyDown(Key.RightCtrl)) return;
+
+        _isZoomSelecting = true;
+        _zoomSelectOrigin = e.GetPosition(TimelineGrid);
+        _zoomSelectOriginBeat = Vm.PixelToBeat(_zoomSelectOrigin.X);
+        _previousZoomLevel = Vm.ZoomLevel;
+        _zoomSelectTrackHeightBefore = Vm.CurrentTrackHeight;
+
+        // Show & initialise the selection rectangle at zero size
+        var rect = ZoomRect;
+        if (rect is null) return;
+        Canvas.SetLeft(rect, _zoomSelectOrigin.X);
+        Canvas.SetTop(rect, _zoomSelectOrigin.Y);
+        rect.Width = 0;
+        rect.Height = 0;
+        rect.Visibility = Visibility.Visible;
+
+        TimelineScrollView.CaptureMouse();
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Updates the zoom selection rectangle while dragging.
+    /// </summary>
+    private void TimelineScrollView_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_isZoomSelecting) return;
+
+        var current = e.GetPosition(TimelineGrid);
+
+        var x = Math.Min(_zoomSelectOrigin.X, current.X);
+        var y = Math.Min(_zoomSelectOrigin.Y, current.Y);
+        var w = Math.Abs(current.X - _zoomSelectOrigin.X);
+        var h = Math.Abs(current.Y - _zoomSelectOrigin.Y);
+
+        var rect = ZoomRect;
+        if (rect is null) return;
+        Canvas.SetLeft(rect, x);
+        Canvas.SetTop(rect, y);
+        rect.Width = w;
+        rect.Height = h;
+    }
+
+    /// <summary>
+    /// Completes the zoom selection:
+    /// • If the rectangle is wide enough → zoom-to-fit the selected beat range.
+    /// • If it was just a click (no drag) → zoom out.
+    /// </summary>
+    private void TimelineScrollView_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!_isZoomSelecting) return;
+
+        _isZoomSelecting = false;
+        if (ZoomRect is { } rect) rect.Visibility = Visibility.Collapsed;
+        TimelineScrollView.ReleaseMouseCapture();
+
+        if (Vm is null) return;
+
+        var release = e.GetPosition(TimelineGrid);
+        var dragPixels = Math.Abs(release.X - _zoomSelectOrigin.X);
+
+        const double minDragThreshold = 8.0; // pixels — below this counts as a click
+
+        if (dragPixels < minDragThreshold)
+        {
+            // Simple Ctrl+RightClick → zoom out (step back)
+            ZoomOutFromPoint(_zoomSelectOrigin);
+        }
+        else
+        {
+            // Drag completed → zoom to fit the selected range (horizontal + vertical)
+            var left = Math.Min(_zoomSelectOrigin.X, release.X);
+            var right = Math.Max(_zoomSelectOrigin.X, release.X);
+            var top = Math.Min(_zoomSelectOrigin.Y, release.Y);
+            var bottom = Math.Max(_zoomSelectOrigin.Y, release.Y);
+            ZoomToSelection(left, right, top, bottom);
+        }
+
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Zooms the timeline so the selected rectangle fills the viewport
+    /// both horizontally (beat range) and vertically (track range).
+    /// </summary>
+    private void ZoomToSelection(double leftPx, double rightPx, double topPx, double bottomPx)
+    {
+        if (Vm is null) return;
+
+        // ── Horizontal: zoom to beat range ──────────────────────────────────
+        var leftBeat = Vm.PixelToBeat(leftPx);
+        var rightBeat = Vm.PixelToBeat(rightPx);
+        var beatSpan = rightBeat - leftBeat;
+        if (beatSpan <= 0) return;
+
+        var viewportWidth = TimelineScrollView.ViewportWidth;
+        var requiredPixelsPerBeat = viewportWidth / beatSpan;
+        var basePixelsPerBeat = Vm.PixelsPerBeat / Vm.ZoomLevel;
+        var newZoom = Math.Clamp(requiredPixelsPerBeat / basePixelsPerBeat, 0.1, 8.0);
+
+        Vm.ZoomLevel = newZoom;
+
+        var newLeftPx = Vm.BeatToPixel(leftBeat);
+        TimelineScrollView.ScrollToHorizontalOffset(Math.Round(newLeftPx));
+
+        // ── Vertical: scale track height so the selected tracks fill the viewport ──
+        var selectionHeight = bottomPx - topPx;
+        if (selectionHeight > 0)
+        {
+            var tracksInSelection = selectionHeight / _zoomSelectTrackHeightBefore;
+            if (tracksInSelection >= 0.5)
+            {
+                var viewportHeight = TimelineScrollView.ViewportHeight;
+                Vm.CurrentTrackHeight = viewportHeight / tracksInSelection;
+            }
+        }
+
+        // Scroll vertically: convert the original top position to the new coordinate system
+        var topTrackIndex = topPx / _zoomSelectTrackHeightBefore;
+        TimelineScrollView.ScrollToVerticalOffset(Math.Round(topTrackIndex * Vm.CurrentTrackHeight));
+    }
+
+    /// <summary>
+    /// Zooms out one step, keeping the given point roughly centred
+    /// both horizontally and vertically.
+    /// </summary>
+    private void ZoomOutFromPoint(Point canvasPoint)
+    {
+        if (Vm is null) return;
+
+        var beatAtPoint = Vm.PixelToBeat(canvasPoint.X);
+        var trackAtPoint = canvasPoint.Y / Vm.CurrentTrackHeight;
+
+        // Zoom out horizontally
+        Vm.ZoomLevel = Math.Max(0.1, Vm.ZoomLevel / 1.5);
+
+        // Shrink track height so all tracks fit in the viewport
+        var viewportHeight = TimelineScrollView.ViewportHeight;
+        var trackCount = Math.Max(1, Vm.Tracks.Count);
+        var fitHeight = viewportHeight / trackCount;
+        // Use the smaller of: current shrunk by same factor, or fit-all
+        Vm.CurrentTrackHeight = Math.Min(Vm.CurrentTrackHeight / 1.5, fitHeight);
+
+        // Keep the beat under the click point at the same viewport-relative position
+        var viewportX = canvasPoint.X - TimelineScrollView.HorizontalOffset;
+        var newPixel = Vm.BeatToPixel(beatAtPoint);
+        TimelineScrollView.ScrollToHorizontalOffset(Math.Round(newPixel - viewportX));
+
+        // Keep the track under the click point at the same viewport-relative position
+        var viewportY = canvasPoint.Y - TimelineScrollView.VerticalOffset;
+        var newY = trackAtPoint * Vm.CurrentTrackHeight;
+        TimelineScrollView.ScrollToVerticalOffset(Math.Round(newY - viewportY));
+    }
 
     /// <summary>
     /// Handles clicking on the timeline to seek playhead

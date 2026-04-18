@@ -33,6 +33,46 @@ public partial class MainWindow : Window
             return; // Shortcut was handled
         }
         
+        // Edit shortcuts (Ctrl+Z/Y/X/C/V, Delete)
+        if (Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            switch (e.Key)
+            {
+                case Key.Z:
+                    if (_viewModel.EditMenuViewModel.UndoCommand.CanExecute(null))
+                        _viewModel.EditMenuViewModel.UndoCommand.Execute(null);
+                    e.Handled = true; return;
+                case Key.Y:
+                    if (_viewModel.EditMenuViewModel.RedoCommand.CanExecute(null))
+                        _viewModel.EditMenuViewModel.RedoCommand.Execute(null);
+                    e.Handled = true; return;
+                case Key.X:
+                    if (_viewModel.EditMenuViewModel.CutCommand.CanExecute(null))
+                        _viewModel.EditMenuViewModel.CutCommand.Execute(null);
+                    e.Handled = true; return;
+                case Key.C:
+                    if (_viewModel.EditMenuViewModel.CopyCommand.CanExecute(null))
+                        _viewModel.EditMenuViewModel.CopyCommand.Execute(null);
+                    e.Handled = true; return;
+                case Key.V:
+                    if (_viewModel.EditMenuViewModel.PasteCommand.CanExecute(null))
+                        _viewModel.EditMenuViewModel.PasteCommand.Execute(null);
+                    e.Handled = true; return;
+                case Key.A:
+                    if (_viewModel.EditMenuViewModel.SelectAllCommand.CanExecute(null))
+                        _viewModel.EditMenuViewModel.SelectAllCommand.Execute(null);
+                    e.Handled = true; return;
+            }
+        }
+        
+        if (e.Key == Key.Delete && Keyboard.Modifiers == ModifierKeys.None)
+        {
+            if (_viewModel.EditMenuViewModel.DeleteCommand.CanExecute(null))
+                _viewModel.EditMenuViewModel.DeleteCommand.Execute(null);
+            e.Handled = true;
+            return;
+        }
+        
         // Ctrl+P opens plugin palette
         if (e.Key == Key.P && Keyboard.Modifiers == ModifierKeys.Control)
         {

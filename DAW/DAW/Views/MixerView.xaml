@@ -19,6 +19,8 @@ Background="#0D1117">
 <local:TrackSelectionConverter x:Key="TrackSelectionConverter"/>
 <local:InverseBoolToVisibilityConverter x:Key="InverseBoolToVis"/>
 <local:ObjectToVisibilityConverter x:Key="ObjectToVis"/>
+<local:VolumeToMeterHeightConverter x:Key="MasterMeterHeight" MaxHeight="160"/>
+<local:VolumeToMeterColorConverter x:Key="MasterMeterColor"/>
 
     <!-- Vertical Fader Style (same as MixerChannelControl) -->
     <Style x:Key="MasterFader" TargetType="Slider">
@@ -340,7 +342,6 @@ Background="#0D1117">
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
                 
             <!-- Master Label -->
@@ -362,13 +363,140 @@ Background="#0D1117">
                         ToolTip="Rechtsklick = Zurücksetzen"/>
             </StackPanel>
                 
-            <!-- Master Fader -->
-            <StackPanel Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Center">
-                <Slider Value="{Binding MasterVolume, Mode=TwoWay}"
+            <!-- Master Fader + Stereo VU Meter -->
+            <Grid Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>  <!-- L/R meter -->
+                    <ColumnDefinition Width="6"/>
+                    <ColumnDefinition Width="Auto"/>  <!-- Fader -->
+                </Grid.ColumnDefinitions>
+
+                <!-- ═══ Stereo VU Meter Gauge ═══ -->
+                <Border Grid.Column="0" Width="22" Height="160" Background="#0A0E14" CornerRadius="3"
+                        BorderBrush="#1A2030" BorderThickness="1">
+                    <Grid>
+                        <!-- Background dB zone colouring -->
+                        <Grid VerticalAlignment="Bottom" Height="160">
+                            <!-- Green zone: bottom 114/140 * 160 ≈ 130px -->
+                            <Border VerticalAlignment="Bottom" Height="130" CornerRadius="0,0,3,3">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                                        <GradientStop Color="#0A1A0A" Offset="0"/>
+                                        <GradientStop Color="#0F2A0F" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+                            <!-- Orange zone: ~15px -->
+                            <Border VerticalAlignment="Bottom" Height="15" Margin="0,0,0,130">
+                                <Border.Background>
+                                    <SolidColorBrush Color="#1A1A0A"/>
+                                </Border.Background>
+                            </Border>
+                            <!-- Red zone: top ~15px -->
+                            <Border VerticalAlignment="Top" Height="15" CornerRadius="3,3,0,0">
+                                <Border.Background>
+                                    <SolidColorBrush Color="#1A0A0A"/>
+                                </Border.Background>
+                            </Border>
+                        </Grid>
+
+                        <!-- L/R active bars -->
+                        <Grid Margin="2,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="2"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Left channel bar -->
+                            <Border Grid.Column="0" VerticalAlignment="Bottom" CornerRadius="0,0,1,1"
+                                    Height="{Binding MasterMeterLeft, Converter={StaticResource MasterMeterHeight}}"
+                                    Background="{Binding MasterMeterLeft, Converter={StaticResource MasterMeterColor}}">
+                                <Border.Effect>
+                                    <BlurEffect Radius="1"/>
+                                </Border.Effect>
+                            </Border>
+                            <!-- Left channel glow overlay -->
+                            <Border Grid.Column="0" VerticalAlignment="Bottom" CornerRadius="0,0,1,1"
+                                    Height="{Binding MasterMeterLeft, Converter={StaticResource MasterMeterHeight}}"
+                                    Opacity="0.5">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                        <GradientStop Color="#402ECC40" Offset="0"/>
+                                        <GradientStop Color="Transparent" Offset="0.5"/>
+                                        <GradientStop Color="#402ECC40" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+
+                            <!-- Gap -->
+                            <Rectangle Grid.Column="1" Fill="#0A0E14"/>
+
+                            <!-- Right channel bar -->
+                            <Border Grid.Column="2" VerticalAlignment="Bottom" CornerRadius="0,0,1,1"
+                                    Height="{Binding MasterMeterRight, Converter={StaticResource MasterMeterHeight}}"
+                                    Background="{Binding MasterMeterRight, Converter={StaticResource MasterMeterColor}}">
+                                <Border.Effect>
+                                    <BlurEffect Radius="1"/>
+                                </Border.Effect>
+                            </Border>
+                            <!-- Right channel glow overlay -->
+                            <Border Grid.Column="2" VerticalAlignment="Bottom" CornerRadius="0,0,1,1"
+                                    Height="{Binding MasterMeterRight, Converter={StaticResource MasterMeterHeight}}"
+                                    Opacity="0.5">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                        <GradientStop Color="#402ECC40" Offset="0"/>
+                                        <GradientStop Color="Transparent" Offset="0.5"/>
+                                        <GradientStop Color="#402ECC40" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+                        </Grid>
+
+                        <!-- LED segment lines for visual texture -->
+                        <Canvas IsHitTestVisible="False" ClipToBounds="True">
+                            <Rectangle Canvas.Top="5"   Width="22" Height="1" Fill="#0A0E14" Opacity="0.6"/>
+                            <Rectangle Canvas.Top="15"  Width="22" Height="1" Fill="#0A0E14" Opacity="0.6"/>
+                            <Rectangle Canvas.Top="25"  Width="22" Height="1" Fill="#0A0E14" Opacity="0.6"/>
+                            <Rectangle Canvas.Top="35"  Width="22" Height="1" Fill="#0A0E14" Opacity="0.6"/>
+                            <Rectangle Canvas.Top="45"  Width="22" Height="1" Fill="#0A0E14" Opacity="0.6"/>
+                            <Rectangle Canvas.Top="55"  Width="22" Height="1" Fill="#0A0E14" Opacity="0.6"/>
+                            <Rectangle Canvas.Top="65"  Width="22" Height="1" Fill="#0A0E14" Opacity="0.6"/>
+                            <Rectangle Canvas.Top="75"  Width="22" Height="1" Fill="#0A0E14" Opacity="0.6"/>
+                            <Rectangle Canvas.Top="85"  Width="22" Height="1" Fill="#0A0E14" Opacity="0.6"/>
+                            <Rectangle Canvas.Top="95"  Width="22" Height="1" Fill="#0A0E14" Opacity="0.6"/>
+                            <Rectangle Canvas.Top="105" Width="22" Height="1" Fill="#0A0E14" Opacity="0.6"/>
+                            <Rectangle Canvas.Top="115" Width="22" Height="1" Fill="#0A0E14" Opacity="0.6"/>
+                            <Rectangle Canvas.Top="125" Width="22" Height="1" Fill="#0A0E14" Opacity="0.6"/>
+                            <Rectangle Canvas.Top="135" Width="22" Height="1" Fill="#0A0E14" Opacity="0.6"/>
+                            <Rectangle Canvas.Top="145" Width="22" Height="1" Fill="#0A0E14" Opacity="0.6"/>
+                            <Rectangle Canvas.Top="155" Width="22" Height="1" Fill="#0A0E14" Opacity="0.6"/>
+                        </Canvas>
+
+                        <!-- 0 dB threshold marker (red line) -->
+                        <Rectangle VerticalAlignment="Top" Margin="0,15,0,0" Height="1" 
+                                   Fill="#FF4136" Opacity="0.9"/>
+                        <!-- -6 dB marker -->
+                        <Rectangle VerticalAlignment="Top" Margin="0,30,0,0" Height="1" 
+                                   Fill="#FFA500" Opacity="0.6"/>
+
+                        <!-- L/R labels -->
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Bottom" 
+                                    HorizontalAlignment="Center" Margin="0,0,0,2">
+                            <TextBlock Text="L" Foreground="#334455" FontSize="7" Margin="0,0,6,0"/>
+                            <TextBlock Text="R" Foreground="#334455" FontSize="7"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Master Volume Fader -->
+                <Slider Grid.Column="2"
+                        Value="{Binding MasterVolume, Mode=TwoWay}"
                         Style="{StaticResource MasterFader}"
                         MouseRightButtonDown="MasterVolume_ResetToDefault"
                         ToolTip="Rechtsklick = Zurücksetzen"/>
-            </StackPanel>
+            </Grid>
                 
             <!-- Master dB Display -->
             <Border Grid.Row="3" Background="#0D1117" CornerRadius="3" Padding="6,3" Margin="4">
@@ -378,24 +506,6 @@ Background="#0D1117">
                            FontWeight="Bold"
                            FontFamily="Consolas"
                            HorizontalAlignment="Center"/>
-            </Border>
-                
-            <!-- Master Level Meters -->
-            <Border Grid.Row="4" Background="#0D1117" CornerRadius="3" Padding="6,4" Margin="4,4,4,0">
-                <StackPanel>
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="L" Foreground="#667788" FontSize="8" Width="12"/>
-                        <ProgressBar Value="{Binding MasterVolume}" Width="55"
-                                     Maximum="1" Height="6" 
-                                     Foreground="#4CAF50" Background="#21262D"/>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                        <TextBlock Text="R" Foreground="#667788" FontSize="8" Width="12"/>
-                        <ProgressBar Value="{Binding MasterVolume}" Width="55"
-                                     Maximum="1" Height="6" 
-                                     Foreground="#4CAF50" Background="#21262D"/>
-                    </StackPanel>
-                </StackPanel>
             </Border>
         </Grid>
     </Border>
@@ -661,15 +771,19 @@ Background="#0D1117">
                                                            Margin="2,4"
                                                            VerticalAlignment="Center"/>
                                                 
-                                                <!-- Effect Name -->
-                                                <TextBlock Grid.Column="2" 
-                                                           Text="{Binding Effect.Name}" 
-                                                           Foreground="#C9D1D9"
-                                                           FontSize="9"
-                                                           FontWeight="SemiBold"
-                                                           VerticalAlignment="Center"
-                                                           TextTrimming="CharacterEllipsis"
-                                                           Margin="4,4"/>
+                                                <!-- Effect Name (click to open plugin window) -->
+                                                <Border Grid.Column="2" Background="Transparent" Cursor="Hand"
+                                                        MouseLeftButtonDown="OnSlotOpenPlugin"
+                                                        Tag="{Binding SlotNumber}"
+                                                        ToolTip="Doppelklick = Plugin öffnen">
+                                                    <TextBlock Text="{Binding Effect.Name}" 
+                                                               Foreground="#C9D1D9"
+                                                               FontSize="9"
+                                                               FontWeight="SemiBold"
+                                                               VerticalAlignment="Center"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               Margin="4,4"/>
+                                                </Border>
                                                 
                                                 <!-- Enable/Bypass Toggle -->
                                                 <ToggleButton Grid.Column="3" 

@@ -35,9 +35,11 @@ namespace DAW.ViewModels;
 public sealed class ArrangementViewModel : INotifyPropertyChanged
 {
     // ── Layout constants ───────────────────────────────────────────────────────
-    public const double BasePixelsPerBeat = 80.0;
-    public const double TrackHeight       = 52.0;
-    public const int    BeatsPerBar       = 4;
+    public const double BasePixelsPerBeat  = 80.0;
+    public const double DefaultTrackHeight = 52.0;
+    public const double MinTrackHeight     = 16.0;
+    public const double MaxTrackHeight     = 120.0;
+    public const int    BeatsPerBar        = 4;
 
     private const double MinZoom   = 0.1;
     private const double MaxZoom   = 8.0;
@@ -46,6 +48,7 @@ public sealed class ArrangementViewModel : INotifyPropertyChanged
     // ── Private state ──────────────────────────────────────────────────────────
     private readonly MainViewModel _mainVm;
     private double _zoomLevel      = 1.0;
+    private double _trackHeight    = DefaultTrackHeight;
     private double _playheadBeat;
     private double _snapResolution = 1.0;
     private ArrangementClipViewModel? _selectedClip;
@@ -69,10 +72,11 @@ public sealed class ArrangementViewModel : INotifyPropertyChanged
         ZoomOutCommand = new RelayCommand(() => ZoomLevel = Math.Max(MinZoom, ZoomLevel / 1.25));
         ZoomResetCommand = new RelayCommand(() => ZoomLevel = 1.0);
 
-        SnapQuarterCommand   = new RelayCommand(() => SnapResolution = 1.0);
-        SnapEighthCommand    = new RelayCommand(() => SnapResolution = 0.5);
-        SnapSixteenthCommand = new RelayCommand(() => SnapResolution = 0.25);
-        AddEmptyTrackCommand = new RelayCommand(() => AddEmptyTrack());
+        SnapQuarterCommand       = new RelayCommand(() => SnapResolution = 1.0);
+        SnapEighthCommand        = new RelayCommand(() => SnapResolution = 0.5);
+        SnapSixteenthCommand     = new RelayCommand(() => SnapResolution = 0.25);
+        AddEmptyTrackCommand     = new RelayCommand(() => AddEmptyTrack());
+        ResetTrackHeightCommand  = new RelayCommand(() => CurrentTrackHeight = DefaultTrackHeight);
     }
 
     // ── Track collection ───────────────────────────────────────────────────────
@@ -134,13 +138,30 @@ public sealed class ArrangementViewModel : INotifyPropertyChanged
     /// <summary>Canvas-absolute pixel position of the playhead needle with pixel snapping.</summary>
     public double PlayheadPixel => Math.Round(BeatToPixel(PlayheadBeat));
 
+    // ── Vertical zoom (track height) ─────────────────────────────────────────
+
+    /// <summary>Current track lane height in pixels. Adjustable via vertical zoom.</summary>
+    public double CurrentTrackHeight
+    {
+        get => _trackHeight;
+        set
+        {
+            if (!SetField(ref _trackHeight, Math.Clamp(value, MinTrackHeight, MaxTrackHeight))) return;
+            OnPropertyChanged(nameof(ClipHeight));
+            OnPropertyChanged(nameof(TotalTimelineHeight));
+        }
+    }
+
+    /// <summary>Height of a clip inside a track lane (4 px less than lane for padding).</summary>
+    public double ClipHeight => Math.Max(8, CurrentTrackHeight - 4);
+
     // ── Layout ─────────────────────────────────────────────────────────────────
 
     /// <summary>Total width of the timeline canvas in pixels.</summary>
     public double TotalTimelineWidth => TotalBars * BeatsPerBar * PixelsPerBeat;
 
     /// <summary>Total height of the timeline canvas in pixels.</summary>
-    public double TotalTimelineHeight => Math.Max(Tracks.Count * TrackHeight, TrackHeight);
+    public double TotalTimelineHeight => Math.Max(Tracks.Count * CurrentTrackHeight, CurrentTrackHeight);
 
     public double BPM => _mainVm.BPM;
 
@@ -163,7 +184,8 @@ public sealed class ArrangementViewModel : INotifyPropertyChanged
     public ICommand SnapQuarterCommand   { get; }
     public ICommand SnapEighthCommand    { get; }
     public ICommand SnapSixteenthCommand { get; }
-    public ICommand AddEmptyTrackCommand { get; }
+    public ICommand AddEmptyTrackCommand     { get; }
+    public ICommand ResetTrackHeightCommand  { get; }
 
     // ── Internal ───────────────────────────────────────────────────────────────
 

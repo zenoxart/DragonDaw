@@ -52,12 +52,12 @@ public sealed class MixerChannelModel : INotifyPropertyChanged
     public MixerChannelType ChannelType { get; set; } = MixerChannelType.Track;
 
     /// <summary>
-    /// Volume level (0.0 to 1.0)
+    /// Volume level as linear amplitude (0.0 to ~1.9953 = +6 dB)
     /// </summary>
     public double Volume
     {
         get => _volume;
-        set => SetField(ref _volume, Math.Clamp(value, 0.0, 1.0));
+        set => SetField(ref _volume, Math.Clamp(value, 0.0, 1.99526231496888));
     }
 
     /// <summary>

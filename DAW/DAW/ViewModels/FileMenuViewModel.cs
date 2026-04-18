@@ -64,8 +64,8 @@ public class FileMenuViewModel : INotifyPropertyChanged
     {
         NewProjectCommand = new AsyncRelayCommand(ExecuteNewProjectAsync);
         OpenProjectCommand = new AsyncRelayCommand(ExecuteOpenProjectAsync);
-        SaveProjectCommand = new AsyncRelayCommand(ExecuteSaveProjectAsync, CanExecuteSaveProject);
-        SaveProjectAsCommand = new AsyncRelayCommand(ExecuteSaveAsProjectAsync, CanExecuteSaveAsProject);
+        SaveProjectCommand = new AsyncRelayCommand(ExecuteSaveProjectAsync);
+        SaveProjectAsCommand = new AsyncRelayCommand(ExecuteSaveAsProjectAsync);
         OpenRecentCommand = new AsyncRelayCommand<RecentProject>(ExecuteOpenRecentAsync);
         ExitCommand = new AsyncRelayCommand(ExecuteExitAsync);
     }
@@ -113,9 +113,6 @@ public class FileMenuViewModel : INotifyPropertyChanged
         
         System.Windows.Application.Current.Shutdown();
     }
-
-    private bool CanExecuteSaveProject() => _mainViewModel.EnhancedProjectService.CurrentProject != null;
-    private bool CanExecuteSaveAsProject() => _mainViewModel.EnhancedProjectService.CurrentProject != null;
 
     private async Task ExecuteOpenRecentAsync(RecentProject? recentProject)
     {

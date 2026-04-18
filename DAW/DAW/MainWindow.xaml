@@ -266,131 +266,334 @@ mc:Ignorable="d"
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
         
-        <!-- Menu Bar -->
-        <Menu Grid.Row="0" 
-              Background="{StaticResource PanelBg}"
-              Foreground="#DDD"
-              BorderBrush="#3A3A3A"
-              BorderThickness="0,0,0,1">
-            <MenuItem Header="Datei" 
-                      ItemsSource="{Binding FileMenuViewModel.FileMenuItems}"
-                      ItemContainerStyle="{StaticResource DynamicMenuItemStyle}"/>
-            <MenuItem Header="Bearbeiten" IsEnabled="False"/>
-            <MenuItem Header="Ansicht" IsEnabled="False"/>
-            <MenuItem Header="Projekt" IsEnabled="False"/>
-            <MenuItem Header="Werkzeuge" IsEnabled="False"/>
-            <MenuItem Header="Hilfe" IsEnabled="False"/>
-        </Menu>
-        
-        
-        <!-- TOP TOOLBAR - Lapis Style -->
-        <Border Grid.Row="1" Background="#161B22" BorderBrush="#30363D" BorderThickness="0,0,0,1">
+        <!-- ═══ UNIFIED TOOLBAR ═══ -->
+        <Border Grid.Row="0" Background="#161B22" BorderBrush="#30363D" BorderThickness="0,0,0,1">
             <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/> <!-- Menu + Transport + Master -->
+                </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/> <!-- Logo + Menu -->
+                    <ColumnDefinition Width="Auto"/> <!-- Separator -->
+                    <ColumnDefinition Width="Auto"/> <!-- Transport -->
+                    <ColumnDefinition Width="Auto"/> <!-- Separator -->
+                    <ColumnDefinition Width="Auto"/> <!-- Tools -->
+                    <ColumnDefinition Width="Auto"/> <!-- Separator -->
+                    <ColumnDefinition Width="Auto"/> <!-- Toggles -->
+                    <ColumnDefinition Width="*"/>    <!-- Flex -->
+                    <ColumnDefinition Width="Auto"/> <!-- Master + Info -->
                 </Grid.ColumnDefinitions>
-                
-                <!-- Logo/Title -->
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="10,8">
-                    <TextBlock Text="🐉" FontSize="18" FontWeight="Bold" Foreground="#C41E3A" VerticalAlignment="Center"/>
-                    <TextBlock Text=" DRAGON" FontSize="14" FontWeight="Bold" Foreground="#E63946" VerticalAlignment="Center" Margin="4,0,0,0"/>
+
+                <!-- Logo + File Menu -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="🐉" FontSize="15" Foreground="#C41E3A" VerticalAlignment="Center" Margin="8,0,2,0"/>
+                    <Menu Background="Transparent" Foreground="#DDD" VerticalAlignment="Center">
+                        <MenuItem Header="Datei" 
+                                  ItemsSource="{Binding FileMenuViewModel.FileMenuItems}"
+                                  ItemContainerStyle="{StaticResource DynamicMenuItemStyle}"
+                                  Padding="6,5" FontSize="11"/>
+                        <MenuItem Header="Bearbeiten" 
+                                  ItemsSource="{Binding EditMenuViewModel.EditMenuItems}"
+                                  ItemContainerStyle="{StaticResource DynamicMenuItemStyle}"
+                                  Padding="6,5" FontSize="11"/>
+                        <MenuItem Header="Ansicht" IsEnabled="False" Padding="6,5" FontSize="11"/>
+                        <MenuItem Header="Hilfe" IsEnabled="False" Padding="6,5" FontSize="11"/>
+                    </Menu>
                 </StackPanel>
 
-                <!-- Transport Controls (Center) -->
-                <Border Grid.Column="2" HorizontalAlignment="Center" Background="#0D1117" 
-                        CornerRadius="4" Padding="8,4" Margin="0,6">
-                    <StackPanel Orientation="Horizontal">
-                        <!-- Rewind -->
-                        <Button Style="{StaticResource TransportButton}" Content="⏮" ToolTip="Zum Anfang"/>
-                        <!-- Stop -->
-                        <Button Style="{StaticResource StopButton}" Content="⏹" 
-                                Command="{Binding StopAllCommand}" ToolTip="Stop"/>
-                        <!-- Play -->
-                        <Button Style="{StaticResource PlayButton}" Content="▶" 
-                                Command="{Binding PlayAllCommand}" ToolTip="Play All (Alle Tracks)"/>
-                        <!-- Pause -->
-                        <Button Style="{StaticResource TransportButton}" Content="⏸" 
-                                Command="{Binding PauseAllCommand}" ToolTip="Pause"/>
-                        <!-- Record -->
-                        <Button Style="{StaticResource TransportButton}" Foreground="#F44336" Content="⏺" 
-                                ToolTip="Record" IsEnabled="False"/>
-                        
-                        <Rectangle Width="1" Fill="#30363D" Margin="10,4"/>
-                        
-                        <!-- BPM Display -->
-                        <Border Background="#161B22" CornerRadius="3" Padding="8,2" Margin="5,0">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBox Text="{Binding BPM, UpdateSourceTrigger=PropertyChanged}" 
-                                         Background="Transparent" 
-                                         Foreground="#E63946" 
-                                         BorderThickness="0"
-                                         FontWeight="Bold" 
-                                         FontSize="14"
-                                         Width="35"
-                                         TextAlignment="Center"
-                                         VerticalAlignment="Center"
-                                         ToolTip="BPM bearbeiten"/>
-                                <TextBlock Text=" BPM" Foreground="#667788" FontSize="10" 
-                                           VerticalAlignment="Center" Margin="0,2,0,0"/>
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
-                </Border>
-                
-                <!-- Right Side - Master & Tools -->
-                <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="0,0,10,0">
-                    <Button Content="🔬 Analyse" Style="{StaticResource ToolbarButton}" 
-                            Command="{Binding AnalyzeCommand}"/>
-                    <Rectangle Width="1" Fill="#30363D" Margin="10,8"/>
-                    <!-- Master Volume -->
-                    <Border Background="#0D1117" CornerRadius="3" Padding="8,4" VerticalAlignment="Center">
+                <Rectangle Grid.Column="1" Width="1" Fill="#30363D" Margin="4,7"/>
+
+                <!-- Transport Controls -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="4,4">
+                    <Button Style="{StaticResource TransportButton}" Content="⏮" ToolTip="Zum Anfang" Width="28" Height="24" FontSize="11"/>
+                    <Button Style="{StaticResource StopButton}" Content="⏹" Width="28" Height="24" FontSize="11"
+                            Command="{Binding StopAllCommand}" ToolTip="Stop"/>
+                    <Button Style="{StaticResource PlayButton}" Content="▶" Width="28" Height="24" FontSize="11"
+                            Command="{Binding PlayAllCommand}" ToolTip="Play All"/>
+                    <Button Style="{StaticResource TransportButton}" Content="⏸" Width="28" Height="24" FontSize="11"
+                            Command="{Binding PauseAllCommand}" ToolTip="Pause"/>
+                    <Button Style="{StaticResource TransportButton}" Foreground="#F44336" Content="⏺" Width="28" Height="24" FontSize="11"
+                            ToolTip="Record" IsEnabled="False"/>
+                    <Border Background="#0D1117" CornerRadius="3" Padding="6,2" Margin="4,0,0,0" VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="MST" Foreground="#667788" FontSize="10" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <Slider Minimum="0" Maximum="1" Value="{Binding MasterVolume}" 
-                                    Width="80" VerticalAlignment="Center"/>
-                            <TextBlock Text="{Binding MasterVolumeDisplay}" Foreground="#5BA4E6" 
-                                       FontSize="10" Width="45" VerticalAlignment="Center" Margin="5,0,0,0"/>
+                            <TextBox Text="{Binding BPM, UpdateSourceTrigger=PropertyChanged}" 
+                                     Background="Transparent" Foreground="#E63946" BorderThickness="0"
+                                     FontWeight="Bold" FontSize="12" Width="30" TextAlignment="Center"
+                                     VerticalAlignment="Center" ToolTip="BPM bearbeiten"/>
+                            <TextBlock Text="bpm" Foreground="#556677" FontSize="8" VerticalAlignment="Center" Margin="1,1,0,0"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>
-                
-                <!-- Track Count -->
-                <Border Grid.Column="4" Background="#0D1117" CornerRadius="3" Padding="10,4" Margin="0,6,10,6">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="{Binding Tracks.Count}" Foreground="#E63946" FontWeight="Bold" FontSize="14"/>
-                        <TextBlock Text=" Tracks" Foreground="#667788" FontSize="10" VerticalAlignment="Center" Margin="2,2,0,0"/>
-                    </StackPanel>
-                </Border>
+
+                <Rectangle Grid.Column="3" Width="1" Fill="#30363D" Margin="4,7"/>
+
+                <!-- Edit Tools (compact toggles) -->
+                <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" Margin="2,0"
+                            DataContext="{Binding GlobalToolbar}">
+                    <ToggleButton Content="📍" Width="26" Height="22" FontSize="10" Padding="0"
+                                  IsChecked="{Binding IsSelectToolActive, Mode=OneWay}" Command="{Binding SelectToolCommand}"
+                                  ToolTip="Auswahl (S)">
+                        <ToggleButton.Style>
+                            <Style TargetType="ToggleButton">
+                                <Setter Property="Background" Value="#21262D"/>
+                                <Setter Property="Foreground" Value="#AABBCC"/>
+                                <Setter Property="BorderBrush" Value="#30363D"/>
+                                <Setter Property="BorderThickness" Value="1"/>
+                                <Setter Property="Cursor" Value="Hand"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ToggleButton">
+                                            <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="3"
+                                                    Padding="2">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="#2D3748"/>
+                                                    <Setter TargetName="Bd" Property="BorderBrush" Value="#C41E3A"/>
+                                                </Trigger>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="#C41E3A"/>
+                                                    <Setter TargetName="Bd" Property="BorderBrush" Value="#E63946"/>
+                                                    <Setter Property="Foreground" Value="White"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ToggleButton.Style>
+                    </ToggleButton>
+                    <ToggleButton Content="✏" Width="26" Height="22" FontSize="10" Padding="0"
+                                  IsChecked="{Binding IsDrawToolActive, Mode=OneWay}" Command="{Binding DrawToolCommand}"
+                                  ToolTip="Zeichnen (D)">
+                        <ToggleButton.Style>
+                            <Style TargetType="ToggleButton">
+                                <Setter Property="Background" Value="#21262D"/>
+                                <Setter Property="Foreground" Value="#AABBCC"/>
+                                <Setter Property="BorderBrush" Value="#30363D"/>
+                                <Setter Property="BorderThickness" Value="1"/>
+                                <Setter Property="Cursor" Value="Hand"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ToggleButton">
+                                            <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="3"
+                                                    Padding="2">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="#2D3748"/>
+                                                    <Setter TargetName="Bd" Property="BorderBrush" Value="#C41E3A"/>
+                                                </Trigger>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="#C41E3A"/>
+                                                    <Setter TargetName="Bd" Property="BorderBrush" Value="#E63946"/>
+                                                    <Setter Property="Foreground" Value="White"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ToggleButton.Style>
+                    </ToggleButton>
+                    <ToggleButton Content="✂" Width="26" Height="22" FontSize="10" Padding="0"
+                                  IsChecked="{Binding IsSliceToolActive, Mode=OneWay}" Command="{Binding SliceToolCommand}"
+                                  ToolTip="Schnitt (C)">
+                        <ToggleButton.Style>
+                            <Style TargetType="ToggleButton">
+                                <Setter Property="Background" Value="#21262D"/>
+                                <Setter Property="Foreground" Value="#AABBCC"/>
+                                <Setter Property="BorderBrush" Value="#30363D"/>
+                                <Setter Property="BorderThickness" Value="1"/>
+                                <Setter Property="Cursor" Value="Hand"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ToggleButton">
+                                            <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="3"
+                                                    Padding="2">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="#2D3748"/>
+                                                    <Setter TargetName="Bd" Property="BorderBrush" Value="#C41E3A"/>
+                                                </Trigger>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="#C41E3A"/>
+                                                    <Setter TargetName="Bd" Property="BorderBrush" Value="#E63946"/>
+                                                    <Setter Property="Foreground" Value="White"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ToggleButton.Style>
+                    </ToggleButton>
+                </StackPanel>
+
+                <Rectangle Grid.Column="5" Width="1" Fill="#30363D" Margin="4,7"/>
+
+                <!-- Toggles -->
+                <StackPanel Grid.Column="6" Orientation="Horizontal" VerticalAlignment="Center" Margin="2,0"
+                            DataContext="{Binding GlobalToolbar}">
+                    <ToggleButton Content="MON" Width="32" Height="22" FontSize="8" Padding="0"
+                                  IsChecked="{Binding IsMonitoringEnabled, Mode=OneWay}" Command="{Binding ToggleMonitoringCommand}"
+                                  ToolTip="Audio-Monitoring">
+                        <ToggleButton.Style>
+                            <Style TargetType="ToggleButton">
+                                <Setter Property="Background" Value="#21262D"/>
+                                <Setter Property="Foreground" Value="#AABBCC"/>
+                                <Setter Property="BorderBrush" Value="#30363D"/>
+                                <Setter Property="BorderThickness" Value="1"/>
+                                <Setter Property="Cursor" Value="Hand"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ToggleButton">
+                                            <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="3"
+                                                    Padding="2">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="#2D3748"/>
+                                                </Trigger>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="#4CAF50"/>
+                                                    <Setter TargetName="Bd" Property="BorderBrush" Value="#66BB6A"/>
+                                                    <Setter Property="Foreground" Value="White"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ToggleButton.Style>
+                    </ToggleButton>
+                    <ToggleButton Content="MET" Width="32" Height="22" FontSize="8" Padding="0"
+                                  IsChecked="{Binding GlobalToolbar.IsMetronomeEnabled, Mode=OneWay}" Command="{Binding GlobalToolbar.ToggleMetronomeCommand}"
+                                  ToolTip="Metronom">
+                        <ToggleButton.Style>
+                            <Style TargetType="ToggleButton">
+                                <Setter Property="Background" Value="#21262D"/>
+                                <Setter Property="Foreground" Value="#AABBCC"/>
+                                <Setter Property="BorderBrush" Value="#30363D"/>
+                                <Setter Property="BorderThickness" Value="1"/>
+                                <Setter Property="Cursor" Value="Hand"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ToggleButton">
+                                            <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="3"
+                                                    Padding="2">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="#2D3748"/>
+                                                </Trigger>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="#4CAF50"/>
+                                                    <Setter TargetName="Bd" Property="BorderBrush" Value="#66BB6A"/>
+                                                    <Setter Property="Foreground" Value="White"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ToggleButton.Style>
+                    </ToggleButton>
+                    <!-- Audio Browser toggle -->
+                    <ToggleButton x:Name="AudioBrowserToggle" Content="📁" Width="26" Height="22" FontSize="10" Padding="0"
+                                  IsChecked="True" ToolTip="Audio Browser ein/aus">
+                        <ToggleButton.Style>
+                            <Style TargetType="ToggleButton">
+                                <Setter Property="Background" Value="#21262D"/>
+                                <Setter Property="Foreground" Value="#AABBCC"/>
+                                <Setter Property="BorderBrush" Value="#30363D"/>
+                                <Setter Property="BorderThickness" Value="1"/>
+                                <Setter Property="Cursor" Value="Hand"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ToggleButton">
+                                            <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="3"
+                                                    Padding="2">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="#2D3748"/>
+                                                </Trigger>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="#4CAF50"/>
+                                                    <Setter TargetName="Bd" Property="BorderBrush" Value="#66BB6A"/>
+                                                    <Setter Property="Foreground" Value="White"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ToggleButton.Style>
+                    </ToggleButton>
+                </StackPanel>
+
+                <!-- Right: Master Volume + Track Count -->
+                <StackPanel Grid.Column="8" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
+                    <Border Background="#0D1117" CornerRadius="3" Padding="6,3" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="MST" Foreground="#556677" FontSize="8" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <Slider Minimum="0" Maximum="1" Value="{Binding MasterVolume}" 
+                                    Width="60" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding MasterVolumeDisplay}" Foreground="#5BA4E6" 
+                                       FontSize="9" Width="38" VerticalAlignment="Center" Margin="3,0,0,0"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Background="#0D1117" CornerRadius="3" Padding="6,3" Margin="4,0,0,0" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Tracks.Count}" Foreground="#E63946" FontWeight="Bold" FontSize="11"/>
+                            <TextBlock Text=" Trk" Foreground="#556677" FontSize="8" VerticalAlignment="Center" Margin="1,1,0,0"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
             </Grid>
         </Border>
         
-        <!-- Global Toolbar with Transport and Tools -->
-        <views:GlobalToolbarView Grid.Row="3" DataContext="{Binding GlobalToolbar}"/>
-        
         <!-- View Tabs and Main Content -->
-        <Grid Grid.Row="4">
+        <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="280"/>
+                <ColumnDefinition x:Name="AudioBrowserColumn" Width="280"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             
-            <!-- Audio Browser Dock (Left Side) -->
+            <!-- Audio Browser Dock (collapsible) -->
             <Border Grid.Column="0" 
                     Background="#0D1117" 
                     BorderBrush="#30363D" 
                     BorderThickness="0,0,1,0">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Visibility" Value="Visible"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsChecked, ElementName=AudioBrowserToggle}" Value="False">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
                 <browser:AudioBrowserView DataContext="{Binding AudioBrowserVm}"/>
             </Border>
             
@@ -400,7 +603,17 @@ mc:Ignorable="d"
                           Background="#30363D" 
                           VerticalAlignment="Stretch"
                           HorizontalAlignment="Center"
-                          ResizeDirection="Columns"/>
+                          ResizeDirection="Columns">
+                <GridSplitter.Style>
+                    <Style TargetType="GridSplitter">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsChecked, ElementName=AudioBrowserToggle}" Value="False">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </GridSplitter.Style>
+            </GridSplitter>
             
             <!-- Main Content Tabs -->
             <Border Grid.Column="2" Background="#0D1117">
@@ -446,21 +659,18 @@ mc:Ignorable="d"
         </Grid>
         
         <!-- Status Bar -->
-        <Border Grid.Row="5" Background="#0D1117" BorderBrush="#30363D" BorderThickness="0,1,0,0" Padding="10,5">
+        <Border Grid.Row="2" Background="#0D1117" BorderBrush="#30363D" BorderThickness="0,1,0,0" Padding="10,3">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="{Binding StatusMessage}" Foreground="#8899AA" FontSize="11" VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding StatusMessage}" Foreground="#8899AA" FontSize="10" VerticalAlignment="Center"/>
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
-                    <TextBlock Text="Ctrl+P" Foreground="#C41E3A" FontSize="10" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                    <TextBlock Text="Plugin Browser" Foreground="#667788" FontSize="10" VerticalAlignment="Center"/>
-                    <TextBlock Text=" | " Foreground="#21262D" VerticalAlignment="Center"/>
-                    <TextBlock Text="Master: " Foreground="#555" FontSize="10" VerticalAlignment="Center"/>
-                    <TextBlock Text="{Binding MasterVolumeDisplay}" Foreground="#E63946" FontSize="10" VerticalAlignment="Center"/>
-                    <TextBlock Text=" | " Foreground="#21262D" VerticalAlignment="Center"/>
-                    <TextBlock Text="🐉 Dragon DAW" Foreground="#C41E3A" FontSize="10" VerticalAlignment="Center"/>
+                    <TextBlock Text="Ctrl+P" Foreground="#C41E3A" FontSize="9" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                    <TextBlock Text="Plugins" Foreground="#556677" FontSize="9" VerticalAlignment="Center"/>
+                    <TextBlock Text=" · " Foreground="#21262D" VerticalAlignment="Center"/>
+                    <TextBlock Text="🐉 Dragon DAW" Foreground="#C41E3A" FontSize="9" VerticalAlignment="Center"/>
                 </StackPanel>
             </Grid>
         </Border>

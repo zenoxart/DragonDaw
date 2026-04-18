@@ -2,8 +2,10 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Media;
+using System.Windows.Threading;
 using DAW.Audio;
 using NAudio.Wave;
+using NAudio.Wave.SampleProviders;
 
 namespace DAW.Models;
 
@@ -36,14 +38,20 @@ public class Track : INotifyPropertyChanged, IDisposable
     private double _playbackSpeed = 1.0;
     private TimeStretchMode _playbackMode = TimeStretchMode.Resample;
 
-    // NAudio playback with effect support
-    private WaveOutEvent? _waveOut;
+    // NAudio playback with effect support — no per-track output device;
+    // the centralized AudioMixEngine owns the single WaveOutEvent.
     private AudioFileReader? _audioFile;
     private RateChangeSampleProvider? _rateChanger;
     private VolumePanSampleProvider? _volumePan;
     private EffectSampleProvider? _effectProvider;
+    private DAW.Audio.MeteringSampleProvider? _metering;
     private bool _isLoaded;
     private int _trackNumber;
+    
+    // Real-time metering
+    private double _meterLeft;
+    private double _meterRight;
+    private DispatcherTimer? _meterTimer;
     
     // Effect chain for this track
     private bool _showEffects;
@@ -53,11 +61,13 @@ public class Track : INotifyPropertyChanged, IDisposable
         // Initialize effect chain
         EffectChain = new EffectChain();
         
-        // Initialize 10 effect slots
+        // Initialize 10 effect slots linked to the chain
         EffectSlots = new ObservableCollection<EffectSlot>();
         for (int i = 1; i <= MaxEffectSlots; i++)
         {
-            EffectSlots.Add(new EffectSlot(i));
+            var slot = new EffectSlot(i);
+            slot.SetOwnerChain(EffectChain);
+            EffectSlots.Add(slot);
         }
     }
 
@@ -223,7 +233,7 @@ public class Track : INotifyPropertyChanged, IDisposable
     public string DisplayDuration => Duration.ToString(@"mm\:ss");
 
     /// <summary>
-    /// Volume level from 0.0 (silent) to 2.0 (≈ +6 dB gain).
+    /// Volume level as linear amplitude: 0.0 (silent) to ~1.9953 (+6 dB).
     /// 1.0 = unity gain (0 dB).  Stored as linear amplitude; use <see cref="VolumeDisplay"/> for dB.
     /// </summary>
     public double Volume
@@ -231,7 +241,8 @@ public class Track : INotifyPropertyChanged, IDisposable
         get => _volume;
         set
         {
-            if (SetField(ref _volume, Math.Clamp(value, 0.0, 2.0)))
+            // +6 dB = 10^(6/20) ≈ 1.99526
+            if (SetField(ref _volume, Math.Clamp(value, 0.0, 1.99526231496888)))
             {
                 UpdatePlayerVolume();
                 OnPropertyChanged(nameof(VolumeDisplay));
@@ -317,6 +328,13 @@ public class Track : INotifyPropertyChanged, IDisposable
         };
     }
 
+
+    /// <summary>
+    /// The mix format to match when building the sample chain.
+    /// Set before calling <see cref="EnsureLoaded"/>.
+    /// </summary>
+    public WaveFormat? TargetMixFormat { get; set; }
+
     /// <summary>
     /// Loads audio file into this track's player with effect chain.
     /// </summary>
@@ -333,9 +351,23 @@ public class Track : INotifyPropertyChanged, IDisposable
             _audioFile = new AudioFileReader(FilePath);
             Duration = _audioFile.TotalTime;
 
+            ISampleProvider chain = _audioFile;
+
+            // Resample if the file's sample rate doesn't match the mix bus
+            if (TargetMixFormat is not null && _audioFile.WaveFormat.SampleRate != TargetMixFormat.SampleRate)
+            {
+                var resampler = new WdlResamplingSampleProvider(chain, TargetMixFormat.SampleRate);
+                chain = resampler;
+            }
+
+            // Convert mono → stereo if needed
+            if (TargetMixFormat is not null && chain.WaveFormat.Channels == 1 && TargetMixFormat.Channels == 2)
+            {
+                chain = new MonoToStereoSampleProvider(chain);
+            }
+
             // Insert rate-change provider directly after the file reader.
-            // Rate is a volatile float — safe to update from the UI thread while the audio thread reads it.
-            _rateChanger = new RateChangeSampleProvider(_audioFile);
+            _rateChanger = new RateChangeSampleProvider(chain);
             UpdateRateChange();
 
             // Create effect chain provider
@@ -346,21 +378,11 @@ public class Track : INotifyPropertyChanged, IDisposable
             _volumePan.Volume = (float)Volume;
             _volumePan.Pan = (float)Pan;
             
-            // Create output device
-            _waveOut = new WaveOutEvent();
-            _waveOut.Init(_volumePan);
-            _waveOut.PlaybackStopped += (_, _) =>
-            {
-                if (_audioFile != null && _audioFile.Position >= _audioFile.Length)
-                {
-                    // Track ended naturally
-                    System.Windows.Application.Current?.Dispatcher.Invoke(() =>
-                    {
-                        IsPlaying = false;
-                        _audioFile.Position = 0;
-                    });
-                }
-            };
+            // Create metering provider (after volume/pan so levels reflect what the user hears)
+            _metering = new DAW.Audio.MeteringSampleProvider(_volumePan);
+
+            // Expose the final provider for the centralized mix engine
+            Output = _metering;
             
             IsLoaded = true;
         }
@@ -370,18 +392,24 @@ public class Track : INotifyPropertyChanged, IDisposable
         }
     }
     
+    /// <summary>
+    /// The final sample provider for this track's audio chain.
+    /// Feed this into <see cref="Audio.AudioMixEngine.AddInput"/> for playback.
+    /// <c>null</c> when the track has no audio loaded.
+    /// </summary>
+    public ISampleProvider? Output { get; private set; }
+    
     private void DisposeAudio()
     {
-        _waveOut?.Stop();
-        _waveOut?.Dispose();
-        _waveOut = null;
+        Output = null;
         
         _audioFile?.Dispose();
         _audioFile = null;
 
-        _rateChanger = null;    // RateChangeSampleProvider is not IDisposable
+        _rateChanger = null;
         _volumePan = null;
         _effectProvider = null;
+        _metering = null;
     }
     
     /// <summary>
@@ -407,17 +435,26 @@ public class Track : INotifyPropertyChanged, IDisposable
     }
     
     /// <summary>
-    /// Plays this track from current position.
+    /// Ensures the audio pipeline is initialized without starting playback.
+    /// Call this ahead of <see cref="Play"/> to avoid per-track initialization delay.
     /// </summary>
-    public void Play()
+    public void EnsureLoaded()
     {
-        if (_waveOut is null && !string.IsNullOrEmpty(FilePath))
+        if (Output is null && !string.IsNullOrEmpty(FilePath))
         {
             LoadAudio();
         }
-        
-        _waveOut?.Play();
+    }
+
+    /// <summary>
+    /// Marks this track as playing and starts the meter timer.
+    /// Actual audio output is driven by the centralized <see cref="Audio.AudioMixEngine"/>.
+    /// </summary>
+    public void Play()
+    {
+        EnsureLoaded();
         IsPlaying = true;
+        StartMeterTimer();
     }
     
     /// <summary>
@@ -425,8 +462,8 @@ public class Track : INotifyPropertyChanged, IDisposable
     /// </summary>
     public void Pause()
     {
-        _waveOut?.Pause();
         IsPlaying = false;
+        StopMeterTimer();
     }
     
     /// <summary>
@@ -434,12 +471,12 @@ public class Track : INotifyPropertyChanged, IDisposable
     /// </summary>
     public void Stop()
     {
-        _waveOut?.Stop();
         if (_audioFile is not null)
         {
             _audioFile.Position = 0;
         }
         IsPlaying = false;
+        StopMeterTimer();
     }
     
     /// <summary>
@@ -468,8 +505,71 @@ public class Track : INotifyPropertyChanged, IDisposable
         return true;
     }
     
+    // ── Real-time metering ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Current peak level for the left channel (linear amplitude, 0..1+).
+    /// Updated ~30 times per second while playing.
+    /// </summary>
+    public double MeterLeft
+    {
+        get => _meterLeft;
+        private set => SetField(ref _meterLeft, value);
+    }
+
+    /// <summary>
+    /// Current peak level for the right channel (linear amplitude, 0..1+).
+    /// </summary>
+    public double MeterRight
+    {
+        get => _meterRight;
+        private set => SetField(ref _meterRight, value);
+    }
+
+    private void StartMeterTimer()
+    {
+        if (_meterTimer is not null) return;
+        _meterTimer = new DispatcherTimer(DispatcherPriority.Render)
+        {
+            Interval = TimeSpan.FromMilliseconds(33) // ~30 fps
+        };
+        _meterTimer.Tick += MeterTimer_Tick;
+        _meterTimer.Start();
+    }
+
+    private void StopMeterTimer()
+    {
+        _meterTimer?.Stop();
+        _meterTimer = null;
+        // Decay to zero
+        MeterLeft = 0;
+        MeterRight = 0;
+    }
+
+    private void MeterTimer_Tick(object? sender, EventArgs e)
+    {
+        if (_metering is null)
+        {
+            MeterLeft = 0;
+            MeterRight = 0;
+            return;
+        }
+
+        // Read peaks and reset for next window
+        double peakL = _metering.PeakLeft;
+        double peakR = _metering.PeakRight;
+        _metering.ResetPeaks();
+
+        // Smooth decay: fast attack, slow release
+        const double release = 0.7;  // ~30% decay per tick
+
+        MeterLeft  = peakL >= _meterLeft  ? peakL : _meterLeft  * release;
+        MeterRight = peakR >= _meterRight ? peakR : _meterRight * release;
+    }
+
     public void Dispose()
     {
+        StopMeterTimer();
         DisposeAudio();
     }
 }
