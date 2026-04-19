@@ -3,12 +3,32 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Markup;
 using DAW.Audio.Effects;
 using DAW.Models;
 using DAW.ViewModels;
 
 namespace DAW.Views
 {
+    /// <summary>
+    /// Markup extension that returns all values of an enum type.
+    /// Usage: {local:EnumValues {x:Type effects:EqBandMode}}
+    /// </summary>
+    public class EnumValuesExtension : MarkupExtension
+    {
+        public Type EnumType { get; }
+
+        public EnumValuesExtension(Type enumType)
+        {
+            EnumType = enumType ?? throw new ArgumentNullException(nameof(enumType));
+        }
+
+        public override object ProvideValue(IServiceProvider serviceProvider)
+        {
+            return Enum.GetValues(EnumType);
+        }
+    }
+
     /// <summary>
     /// Converter that shows Visible if object is not null, Collapsed otherwise.
     /// </summary>
@@ -673,5 +693,99 @@ namespace DAW.Views
                 ViewModel.StatusMessage = $"✓ {effect.Name} entfernt";
             }
         }
+
+        #region Effect Slot Drag & Drop
+
+        private Point _dragStartPoint;
+        private bool _isDragging;
+        private const string EffectSlotDragFormat = "DAW_EffectSlot";
+
+        /// <summary>Begins drag from a filled effect slot.</summary>
+        private void EffectSlot_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            _dragStartPoint = e.GetPosition(null);
+            _isDragging = false;
+        }
+
+        private void EffectSlot_PreviewMouseMove(object sender, MouseEventArgs e)
+        {
+            if (e.LeftButton != MouseButtonState.Pressed) return;
+            if (sender is not FrameworkElement { DataContext: EffectSlot slot } element) return;
+            if (slot.Effect is null) return;
+
+            var pos = e.GetPosition(null);
+            var diff = pos - _dragStartPoint;
+
+            if (Math.Abs(diff.X) < SystemParameters.MinimumHorizontalDragDistance &&
+                Math.Abs(diff.Y) < SystemParameters.MinimumVerticalDragDistance)
+                return;
+
+            _isDragging = true;
+            var data = new DataObject(EffectSlotDragFormat, slot);
+            DragDrop.DoDragDrop(element, data, DragDropEffects.Copy);
+            _isDragging = false;
+        }
+
+        /// <summary>Handles drop of an effect slot onto a mixer channel strip.</summary>
+        private void MixerChannel_Drop(object sender, DragEventArgs e)
+        {
+            if (!e.Data.GetDataPresent(EffectSlotDragFormat)) return;
+            if (e.Data.GetData(EffectSlotDragFormat) is not EffectSlot sourceSlot) return;
+            if (sourceSlot.Effect is null) return;
+
+            // Find the target track from the channel control's DataContext
+            Track? targetTrack = null;
+            if (sender is FrameworkElement fe)
+            {
+                var current = fe;
+                while (current != null)
+                {
+                    if (current.DataContext is Track t)
+                    {
+                        targetTrack = t;
+                        break;
+                    }
+                    current = current.Parent as FrameworkElement ?? 
+                              System.Windows.Media.VisualTreeHelper.GetParent(current) as FrameworkElement;
+                }
+            }
+
+            if (targetTrack is null) return;
+
+            // Find first empty slot on target track
+            var emptySlot = targetTrack.EffectSlots.FirstOrDefault(s => !s.HasEffect);
+            if (emptySlot is null)
+            {
+                if (ViewModel != null)
+                    ViewModel.StatusMessage = "✗ Kein freier Slot im Ziel-Track";
+                return;
+            }
+
+            // Clone the effect with all settings
+            var clonedEffect = sourceSlot.Effect.Clone();
+            if (clonedEffect is null)
+            {
+                if (ViewModel != null)
+                    ViewModel.StatusMessage = "✗ Effekt konnte nicht kopiert werden";
+                return;
+            }
+
+            emptySlot.Effect = clonedEffect;
+
+            if (ViewModel != null)
+                ViewModel.StatusMessage = $"✓ {clonedEffect.Name} nach {targetTrack.Title} Slot {emptySlot.SlotNumber} kopiert";
+
+            e.Handled = true;
+        }
+
+        private void MixerChannel_DragOver(object sender, DragEventArgs e)
+        {
+            e.Effects = e.Data.GetDataPresent(EffectSlotDragFormat)
+                ? DragDropEffects.Copy
+                : DragDropEffects.None;
+            e.Handled = true;
+        }
+
+        #endregion
     }
 }

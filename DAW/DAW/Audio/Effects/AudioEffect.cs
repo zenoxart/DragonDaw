@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using NAudio.Wave;
 
@@ -83,6 +84,38 @@ public abstract class AudioEffect : INotifyPropertyChanged
     /// <param name="sampleRate">Sample rate in Hz</param>
     /// <param name="channels">Number of channels (1=mono, 2=stereo)</param>
     public abstract void ProcessSamples(float[] buffer, int offset, int count, int sampleRate, int channels);
+
+    /// <summary>
+    /// Creates a deep copy of this effect with all parameter values copied.
+    /// Uses <see cref="EffectFactory"/> to create a new instance, then copies all public read/write properties.
+    /// </summary>
+    public AudioEffect? Clone()
+    {
+        var clone = EffectFactory.Create(EffectType);
+        if (clone is null) return null;
+
+        clone.IsEnabled = IsEnabled;
+        clone.IsExpanded = IsExpanded;
+
+        // Copy all public read/write properties declared on the concrete type
+        foreach (var prop in GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        {
+            if (!prop.CanRead || !prop.CanWrite) continue;
+            if (prop.DeclaringType == typeof(AudioEffect)) continue; // skip base props already handled
+            if (prop.GetIndexParameters().Length > 0) continue;
+
+            try
+            {
+                prop.SetValue(clone, prop.GetValue(this));
+            }
+            catch
+            {
+                // Skip properties that can't be copied (events, etc.)
+            }
+        }
+
+        return clone;
+    }
 
     /// <summary>
     /// Resets the effect state (e.g., clear delay lines, reset filters).

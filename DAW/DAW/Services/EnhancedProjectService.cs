@@ -264,13 +264,12 @@ public sealed class EnhancedProjectService
                 IsArmed = track.IsArmed
             };
             
-            // Export track effects
-            if (track.EffectChain != null)
+            // Export track effects from slots (preserves slot positions)
+            foreach (var slot in track.EffectSlots.Where(s => s.HasEffect))
             {
-                int effectIndex = 0;
-                foreach (var effect in track.EffectChain.Effects)
+                if (slot.Effect != null)
                 {
-                    var projectEffect = ExportEffect(effect, effectIndex++);
+                    var projectEffect = ExportEffect(slot.Effect, slot.SlotNumber);
                     projectTrack.Effects.Add(projectEffect);
                 }
             }
@@ -339,7 +338,16 @@ public sealed class EnhancedProjectService
                 {
                     LowGain = eq.LowGain,
                     MidGain = eq.MidGain,
-                    HighGain = eq.HighGain
+                    HighGain = eq.HighGain,
+                    Bands = eq.Bands.Select(b => new EqBandParameters
+                    {
+                        Number = b.Number,
+                        Gain = b.Gain,
+                        Frequency = b.Frequency,
+                        Q = b.Q,
+                        Mode = (int)b.Mode,
+                        IsEnabled = b.IsEnabled
+                    }).ToList()
                 };
                 break;
                 
@@ -399,9 +407,28 @@ public sealed class EnhancedProjectService
         switch (effect)
         {
             case EqualizerEffect eq when projectEffect.Equalizer != null:
-                eq.LowGain = projectEffect.Equalizer.LowGain;
-                eq.MidGain = projectEffect.Equalizer.MidGain;
-                eq.HighGain = projectEffect.Equalizer.HighGain;
+                if (projectEffect.Equalizer.Bands is { Count: > 0 } bands)
+                {
+                    foreach (var bp in bands)
+                    {
+                        var idx = bp.Number - 1;
+                        if (idx >= 0 && idx < EqualizerEffect.BandCount)
+                        {
+                            eq.Bands[idx].Gain = bp.Gain;
+                            eq.Bands[idx].Frequency = bp.Frequency;
+                            eq.Bands[idx].Q = bp.Q;
+                            eq.Bands[idx].Mode = (EqBandMode)bp.Mode;
+                            eq.Bands[idx].IsEnabled = bp.IsEnabled;
+                        }
+                    }
+                }
+                else
+                {
+                    // Legacy 3-band fallback
+                    eq.LowGain = projectEffect.Equalizer.LowGain;
+                    eq.MidGain = projectEffect.Equalizer.MidGain;
+                    eq.HighGain = projectEffect.Equalizer.HighGain;
+                }
                 break;
                 
             case CompressorEffect comp when projectEffect.Compressor != null:
@@ -514,13 +541,25 @@ public sealed class EnhancedProjectService
                 IsArmed = projectTrack.IsArmed
             };
             
-            // Import track effects
+            // Import track effects into slots (preserves slot positions)
             foreach (var projectEffect in projectTrack.Effects.OrderBy(e => e.SlotIndex))
             {
                 var effect = ImportEffect(projectEffect);
                 if (effect != null)
                 {
-                    track.EffectChain.AddEffect(effect);
+                    var slotIndex = projectEffect.SlotIndex;
+                    var slot = track.EffectSlots.FirstOrDefault(s => s.SlotNumber == slotIndex);
+                    if (slot != null && !slot.HasEffect)
+                    {
+                        slot.Effect = effect;
+                    }
+                    else
+                    {
+                        // Fallback: find first empty slot
+                        var emptySlot = track.EffectSlots.FirstOrDefault(s => !s.HasEffect);
+                        if (emptySlot != null)
+                            emptySlot.Effect = effect;
+                    }
                 }
             }
 

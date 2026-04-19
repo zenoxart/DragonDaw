@@ -365,16 +365,30 @@ public sealed class ProjectEffect
 }
 
 /// <summary>
-/// 3-Band Equalizer parameters
+/// 7-Band Parametric EQ parameters (FL-style).
 /// </summary>
 public sealed class EqualizerParameters
 {
-    public double LowGain { get; set; } = 0.0; // dB, -12 to +12
-    public double MidGain { get; set; } = 0.0;
-    public double HighGain { get; set; } = 0.0;
-    public double LowFrequency { get; set; } = 200.0; // Hz
+    // Legacy properties (backward compat)
+    public double LowGain { get; set; }
+    public double MidGain { get; set; }
+    public double HighGain { get; set; }
+    public double LowFrequency { get; set; } = 200.0;
     public double HighFrequency { get; set; } = 4000.0;
     public double MidQ { get; set; } = 1.0;
+
+    // Full 7-band data
+    public List<EqBandParameters> Bands { get; set; } = [];
+}
+
+public sealed class EqBandParameters
+{
+    public int Number { get; set; }
+    public double Gain { get; set; }
+    public double Frequency { get; set; }
+    public double Q { get; set; } = 1.0;
+    public int Mode { get; set; } // EqBandMode enum as int
+    public bool IsEnabled { get; set; } = true;
 }
 
 /// <summary>

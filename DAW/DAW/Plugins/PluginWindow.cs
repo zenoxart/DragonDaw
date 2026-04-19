@@ -4,6 +4,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using DAW.Audio.Effects;
 using DAW.Models;
+using DAW.Views.Controls;
 
 namespace DAW.Plugins;
 
@@ -29,10 +30,10 @@ public class PluginWindow : Window
     private void InitializeWindow()
     {
         Title = $"{Definition.Icon} {Definition.Name}";
-        Width = 320;
-        Height = 400;
-        MinWidth = 280;
-        MinHeight = 200;
+        Width = Effect is EqualizerEffect ? 580 : 320;
+        Height = Effect is EqualizerEffect ? 380 : 400;
+        MinWidth = Effect is EqualizerEffect ? 380 : 280;
+        MinHeight = Effect is EqualizerEffect ? 280 : 200;
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
         Background = Brushes.Transparent;
@@ -247,9 +248,7 @@ public class PluginWindow : Window
         switch (Effect)
         {
             case EqualizerEffect eq:
-                AddSlider(container, "Low", -12, 12, eq.LowGain, v => eq.LowGain = v, "dB");
-                AddSlider(container, "Mid", -12, 12, eq.MidGain, v => eq.MidGain = v, "dB");
-                AddSlider(container, "High", -12, 12, eq.HighGain, v => eq.HighGain = v, "dB");
+                AddParametricEqUI(container, eq);
                 break;
 
             case CompressorEffect comp:
@@ -281,6 +280,271 @@ public class PluginWindow : Window
         }
     }
 
+    /// <summary>
+    /// Builds the full parametric EQ UI: interactive graph on top, band controls below.
+    /// </summary>
+    private void AddParametricEqUI(StackPanel container, EqualizerEffect eq)
+    {
+        // ── Interactive frequency response graph ──
+        var eqControl = new ParametricEqControl
+        {
+            Effect = eq,
+            MinHeight = 200,
+            Margin = new Thickness(0, 0, 0, 4),
+            Cursor = Cursors.Hand,
+            ToolTip = "Drag: Freq/Gain · Scroll: Q · Right-click: Band mode"
+        };
+        // Round corners via clip
+        var border = new Border
+        {
+            CornerRadius = new CornerRadius(6),
+            Background = new SolidColorBrush(Color.FromRgb(0x0A, 0x0E, 0x14)),
+            ClipToBounds = true,
+            Child = eqControl
+        };
+        container.Children.Add(border);
+
+        // ── Hint text ──
+        container.Children.Add(new TextBlock
+        {
+            Text = "↔ Drag = Freq/Gain   ⟳ Scroll = Q   Right-click = Mode / Options",
+            Foreground = new SolidColorBrush(Color.FromArgb(100, 0x88, 0x99, 0xAA)),
+            FontSize = 9,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 0, 0, 4)
+        });
+    }
+
+    /// <summary>
+    /// Builds an FL-style horizontal strip of 7 vertical EQ band columns.
+    /// Each column: band number, vertical gain fader, freq knob, Q knob, mode combobox.
+    /// </summary>
+    private void AddEqBandStrip(StackPanel container, EqualizerEffect eq)
+    {
+        var strip = new Grid { Margin = new Thickness(0, 4, 0, 4) };
+        for (int i = 0; i < EqualizerEffect.BandCount; i++)
+            strip.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        var modeValues = Enum.GetValues<EqBandMode>();
+
+        for (int i = 0; i < EqualizerEffect.BandCount; i++)
+        {
+            var band = eq.Bands[i];
+            var col = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(2, 0, 2, 0) };
+
+            // Band number
+            col.Children.Add(new TextBlock
+            {
+                Text = $"{band.Number}",
+                Foreground = new SolidColorBrush(Color.FromRgb(0x5B, 0xA4, 0xE6)),
+                FontSize = 10, FontWeight = FontWeights.Bold,
+                HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 2)
+            });
+
+            // Gain value display
+            var gainDisplay = new TextBlock
+            {
+                Text = $"{band.Gain:F0}",
+                Foreground = new SolidColorBrush(Color.FromRgb(0x8B, 0x94, 0x9E)),
+                FontSize = 8, HorizontalAlignment = HorizontalAlignment.Center
+            };
+            col.Children.Add(gainDisplay);
+
+            // Vertical gain fader
+            var gainFader = new Slider
+            {
+                Orientation = System.Windows.Controls.Orientation.Vertical,
+                Minimum = -18, Maximum = 18, Value = band.Gain,
+                Height = 120, Width = 20,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Template = CreateVerticalFaderTemplate()
+            };
+            var bandCapture = band;
+            gainFader.ValueChanged += (s, e) =>
+            {
+                bandCapture.Gain = e.NewValue;
+                gainDisplay.Text = $"{e.NewValue:F0}";
+            };
+            col.Children.Add(gainFader);
+
+            // Freq label + slider-knob + value
+            col.Children.Add(new TextBlock
+            {
+                Text = "Freq", Foreground = new SolidColorBrush(Color.FromRgb(0x55, 0x66, 0x77)),
+                FontSize = 8, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 4, 0, 0)
+            });
+            var freqDisplay = new TextBlock
+            {
+                Text = $"{band.Frequency:F0}",
+                Foreground = new SolidColorBrush(Color.FromRgb(0x5B, 0xA4, 0xE6)),
+                FontSize = 8, HorizontalAlignment = HorizontalAlignment.Center
+            };
+            var freqSlider = new Slider
+            {
+                Minimum = 20, Maximum = 20000, Value = band.Frequency,
+                Width = 32, Height = 18, Template = CreateFaderTemplate()
+            };
+            freqSlider.ValueChanged += (s, e) =>
+            {
+                bandCapture.Frequency = e.NewValue;
+                freqDisplay.Text = $"{e.NewValue:F0}";
+            };
+            col.Children.Add(freqSlider);
+            col.Children.Add(freqDisplay);
+
+            // Q label + slider-knob + value
+            col.Children.Add(new TextBlock
+            {
+                Text = "Q", Foreground = new SolidColorBrush(Color.FromRgb(0x55, 0x66, 0x77)),
+                FontSize = 8, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 2, 0, 0)
+            });
+            var qDisplay = new TextBlock
+            {
+                Text = $"{band.Q:F1}",
+                Foreground = new SolidColorBrush(Color.FromRgb(0x5B, 0xA4, 0xE6)),
+                FontSize = 8, HorizontalAlignment = HorizontalAlignment.Center
+            };
+            var qSlider = new Slider
+            {
+                Minimum = 0.05, Maximum = 30, Value = band.Q,
+                Width = 32, Height = 18, Template = CreateFaderTemplate()
+            };
+            qSlider.ValueChanged += (s, e) =>
+            {
+                bandCapture.Q = e.NewValue;
+                qDisplay.Text = $"{e.NewValue:F1}";
+            };
+            col.Children.Add(qSlider);
+            col.Children.Add(qDisplay);
+
+            // Mode combobox
+            var modeCombo = new ComboBox
+            {
+                ItemsSource = modeValues,
+                SelectedItem = band.Mode,
+                Width = 36, FontSize = 7, Margin = new Thickness(0, 4, 0, 0),
+                Padding = new Thickness(1, 0, 1, 0),
+                Background = new SolidColorBrush(Color.FromRgb(0x21, 0x26, 0x2D)),
+                Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0x30, 0x36, 0x3D))
+            };
+            modeCombo.SelectionChanged += (s, e) =>
+            {
+                if (modeCombo.SelectedItem is EqBandMode m)
+                    bandCapture.Mode = m;
+            };
+            col.Children.Add(modeCombo);
+
+            Grid.SetColumn(col, i);
+            strip.Children.Add(col);
+        }
+
+        container.Children.Add(strip);
+    }
+
+    private static ControlTemplate? _cachedVerticalFaderTemplate;
+
+    private static ControlTemplate CreateVerticalFaderTemplate()
+    {
+        if (_cachedVerticalFaderTemplate != null) return _cachedVerticalFaderTemplate;
+
+        const string xaml = """
+            <ControlTemplate TargetType="Slider"
+                             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                <Grid>
+                    <Border Width="3" Background="#0D1117" CornerRadius="1.5" HorizontalAlignment="Center"/>
+                    <Rectangle Width="8" Height="1" Fill="#334455" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                    <Track x:Name="PART_Track">
+                        <Track.Thumb>
+                            <Thumb Width="18" Height="10">
+                                <Thumb.Template>
+                                    <ControlTemplate>
+                                        <Border Background="#3A3A3A" CornerRadius="2"
+                                                BorderBrush="#555" BorderThickness="1">
+                                            <Border CornerRadius="1" Margin="2,1">
+                                                <Border.Background>
+                                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                        <GradientStop Color="#4A4A4A" Offset="0"/>
+                                                        <GradientStop Color="#353535" Offset="1"/>
+                                                    </LinearGradientBrush>
+                                                </Border.Background>
+                                            </Border>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Thumb.Template>
+                            </Thumb>
+                        </Track.Thumb>
+                    </Track>
+                </Grid>
+            </ControlTemplate>
+            """;
+
+        _cachedVerticalFaderTemplate = (ControlTemplate)System.Windows.Markup.XamlReader.Parse(xaml);
+        return _cachedVerticalFaderTemplate;
+    }
+
+    private void AddBandHeader(StackPanel container, EqBand band, string[] modeNames)
+    {
+        var headerGrid = new Grid { Margin = new Thickness(0, 8, 0, 2) };
+        headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var bandLabel = new TextBlock
+        {
+            Text = $"Band {band.Number}",
+            Foreground = new SolidColorBrush(Color.FromRgb(0x5B, 0xA4, 0xE6)),
+            FontSize = 11,
+            FontWeight = FontWeights.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+
+        var modeCombo = new ComboBox
+        {
+            ItemsSource = modeNames,
+            SelectedIndex = (int)band.Mode,
+            Width = 85,
+            FontSize = 10,
+            VerticalAlignment = VerticalAlignment.Center,
+            Background = new SolidColorBrush(Color.FromRgb(0x21, 0x26, 0x2D)),
+            Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC)),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(0x30, 0x36, 0x3D))
+        };
+        modeCombo.SelectionChanged += (s, e) =>
+        {
+            if (modeCombo.SelectedIndex >= 0)
+                band.Mode = (EqBandMode)modeCombo.SelectedIndex;
+        };
+
+        var enableCheck = new CheckBox
+        {
+            IsChecked = band.IsEnabled,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(6, 0, 0, 0)
+        };
+        enableCheck.Checked += (s, e) => band.IsEnabled = true;
+        enableCheck.Unchecked += (s, e) => band.IsEnabled = false;
+
+        var rightStack = new StackPanel { Orientation = Orientation.Horizontal };
+        rightStack.Children.Add(modeCombo);
+        rightStack.Children.Add(enableCheck);
+
+        Grid.SetColumn(bandLabel, 0);
+        Grid.SetColumn(rightStack, 2);
+        headerGrid.Children.Add(bandLabel);
+        headerGrid.Children.Add(rightStack);
+
+        container.Children.Add(headerGrid);
+
+        container.Children.Add(new Border
+        {
+            Height = 1,
+            Background = new SolidColorBrush(Color.FromRgb(0x30, 0x36, 0x3D)),
+            Margin = new Thickness(0, 0, 0, 4)
+        });
+    }
+
     private void AddSlider(StackPanel container, string label, double min, double max, 
         double value, Action<double> setter, string unit, double displayMultiplier = 1)
     {
@@ -307,7 +571,9 @@ public class PluginWindow : Window
             Minimum = min,
             Maximum = max,
             Value = value,
-            VerticalAlignment = VerticalAlignment.Center
+            VerticalAlignment = VerticalAlignment.Center,
+            Height = 18,
+            Template = CreateFaderTemplate()
         };
 
         var valueText = new TextBlock
@@ -351,6 +617,56 @@ public class PluginWindow : Window
         check.Unchecked += (s, e) => setter(false);
 
         container.Children.Add(check);
+    }
+
+    private static ControlTemplate? _cachedFaderTemplate;
+
+    /// <summary>
+    /// Creates a horizontal fader ControlTemplate matching the FLFaderH style.
+    /// Cached so it's only built once.
+    /// </summary>
+    private static ControlTemplate CreateFaderTemplate()
+    {
+        if (_cachedFaderTemplate != null) return _cachedFaderTemplate;
+
+        // language=XAML
+        const string xaml = """
+            <ControlTemplate TargetType="Slider"
+                             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                <Grid>
+                    <Border Height="4" Background="#0D1117" CornerRadius="2" VerticalAlignment="Center">
+                        <Border.Effect>
+                            <DropShadowEffect ShadowDepth="1" BlurRadius="2" Opacity="0.2"/>
+                        </Border.Effect>
+                    </Border>
+                    <Track x:Name="PART_Track">
+                        <Track.Thumb>
+                            <Thumb Width="10" Height="18">
+                                <Thumb.Template>
+                                    <ControlTemplate>
+                                        <Border Background="#3A3A3A" CornerRadius="2"
+                                                BorderBrush="#555" BorderThickness="1">
+                                            <Border CornerRadius="1" Margin="2,2">
+                                                <Border.Background>
+                                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                                        <GradientStop Color="#4A4A4A" Offset="0"/>
+                                                        <GradientStop Color="#353535" Offset="1"/>
+                                                    </LinearGradientBrush>
+                                                </Border.Background>
+                                            </Border>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Thumb.Template>
+                            </Thumb>
+                        </Track.Thumb>
+                    </Track>
+                </Grid>
+            </ControlTemplate>
+            """;
+
+        _cachedFaderTemplate = (ControlTemplate)System.Windows.Markup.XamlReader.Parse(xaml);
+        return _cachedFaderTemplate;
     }
 
     protected override void OnClosed(EventArgs e)
