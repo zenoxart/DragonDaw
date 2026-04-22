@@ -514,6 +514,21 @@ public partial class ArrangementView : UserControl
         // audioEngine.Seek(TimeSpan.FromSeconds(beat * 60.0 / Vm.BPM));
     }
 
+    // ── Ruler click (seek to position) ───────────────────────────────────────
+
+    /// <summary>
+    /// Clicking the ruler sets the playhead to the clicked position.
+    /// </summary>
+    private void Ruler_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (Vm == null) return;
+
+        var clickX = e.GetPosition(RulerControl).X;
+        var point = new Point(Math.Max(0, clickX), 0);
+        UpdatePlayheadPosition(point);
+        e.Handled = true;
+    }
+
     // ── Playhead interaction (seeking) ────────────────────────────────────────
 
     /// <summary>
@@ -797,4 +812,21 @@ public partial class ArrangementView : UserControl
             e.Handled = true;
         }
     }
+
+    /// <summary>
+    /// Right-click on solo: if multiple tracks are soloed, unsolo all.
+    /// </summary>
+    private void Solo_RightClick(object sender, MouseButtonEventArgs e)
+    {
+        if (Vm == null) return;
+
+        var soloedTracks = Vm.Tracks.Where(t => t.Model.IsSolo).ToList();
+        if (soloedTracks.Count > 1)
+        {
+            foreach (var track in soloedTracks)
+                track.Model.IsSolo = false;
+            e.Handled = true;
+        }
+    }
 }
+

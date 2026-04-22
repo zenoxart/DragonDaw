@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Drawing.Imaging.Effects;
 using System.Runtime.CompilerServices;
 using DAW.Audio.Effects;
 
@@ -50,7 +51,7 @@ public class PluginManager : INotifyPropertyChanged
         Register(new PluginDefinition
         {
             Id = "lapis.eq3",
-            Name = "Lapis EQ",
+            Name = "Parametric EQ",
             Category = "Equalizer",
             Icon = "📊",
             Description = "3-Band parametric equalizer with Low, Mid, High controls",
@@ -61,7 +62,7 @@ public class PluginManager : INotifyPropertyChanged
         Register(new PluginDefinition
         {
             Id = "lapis.compressor",
-            Name = "Lapis Compressor",
+            Name = "1176 Compressor",
             Category = "Dynamics",
             Icon = "📉",
             Description = "Dynamic range compressor with attack, release, and makeup gain",
@@ -72,7 +73,7 @@ public class PluginManager : INotifyPropertyChanged
         Register(new PluginDefinition
         {
             Id = "lapis.reverb",
-            Name = "Lapis Reverb",
+            Name = "Reverb",
             Category = "Reverb",
             Icon = "🏛️",
             Description = "Algorithmic reverb with room size and damping controls",
@@ -83,7 +84,7 @@ public class PluginManager : INotifyPropertyChanged
         Register(new PluginDefinition
         {
             Id = "lapis.delay",
-            Name = "Lapis Delay",
+            Name = "Delay",
             Category = "Delay",
             Icon = "🔁",
             Description = "Stereo delay with feedback and ping-pong mode",
@@ -94,12 +95,23 @@ public class PluginManager : INotifyPropertyChanged
         Register(new PluginDefinition
         {
             Id = "lapis.gain",
-            Name = "Lapis Gain",
+            Name = "Gain",
             Category = "Utility",
             Icon = "🔊",
             Description = "Volume control with optional soft clipping/saturation",
             Factory = () => new GainEffect(),
             Tags = ["gain", "volume", "utility", "saturation", "clip"]
+        });
+
+        Register(new PluginDefinition
+        {
+            Id = "lapis.blackbox",
+            Name = "Blackbox",
+            Category = "Utility",
+            Icon = "🔊",
+            Description = "Tube Saturation",
+            Factory = () => new SaturationEffect(),
+            Tags = ["tube", "blackbox", "utility", "saturation"]
         });
     }
 

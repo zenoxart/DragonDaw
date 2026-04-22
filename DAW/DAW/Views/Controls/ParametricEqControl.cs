@@ -4,6 +4,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using DAW.Audio.Effects;
+using DAW.Plugins;
 
 namespace DAW.Views.Controls;
 
@@ -56,35 +57,39 @@ public sealed class ParametricEqControl : FrameworkElement
         Color.FromRgb(0xE0, 0x50, 0xB0), // 7 Pink
     ];
 
-    // ── Brushes & Pens (cached) ───────────────────────────────────────────
+    // ── Brushes & Pens (theme-aware, cached per theme) ──────────────────
 
-    private static readonly Brush BackgroundBrush = new SolidColorBrush(Color.FromRgb(0x0A, 0x0E, 0x14));
-    private static readonly Pen GridPen = new(new SolidColorBrush(Color.FromArgb(30, 255, 255, 255)), 0.5);
-    private static readonly Pen GridPenMajor = new(new SolidColorBrush(Color.FromArgb(50, 255, 255, 255)), 0.5);
-    private static readonly Pen ZeroLinePen = new(new SolidColorBrush(Color.FromArgb(80, 0x5B, 0xA4, 0xE6)), 1.0);
-    private static readonly Pen CurvePen = new(new SolidColorBrush(Color.FromArgb(200, 0xFF, 0xFF, 0xFF)), 1.5);
-    private static readonly Brush CurveFillBrush;
+    private static string? _eqPaletteTheme;
+    private static Brush BackgroundBrush = null!;
+    private static Pen GridPen = null!;
+    private static Pen GridPenMajor = null!;
+    private static Pen ZeroLinePen = null!;
+    private static Pen CurvePen = null!;
+    private static Brush CurveFillBrush = null!;
     private static readonly Typeface LabelTypeface = new("Segoe UI");
-    private static readonly Brush LabelBrush = new SolidColorBrush(Color.FromArgb(120, 0xCC, 0xCC, 0xCC));
-    private static readonly Brush SpectrumBrush;
-    private static readonly Pen SpectrumStrokePen;
+    private static Brush LabelBrush = null!;
+    private static Brush SpectrumBrush = null!;
+    private static Pen SpectrumStrokePen = null!;
 
     private const int NodeRadius = 6;
     private const int NodeRadiusCompact = 4;
 
-    static ParametricEqControl()
+    private static void EnsureEqPalette()
     {
-        // Freeze shared brushes/pens for cross-thread safety
-        BackgroundBrush.Freeze();
-        GridPen.Freeze();
-        GridPenMajor.Freeze();
-        ZeroLinePen.Freeze();
-        CurvePen.Freeze();
-        LabelBrush.Freeze();
+        var themeId = Services.ThemeService.Instance.CurrentTheme;
+        if (_eqPaletteTheme == themeId && BackgroundBrush != null) return;
+        _eqPaletteTheme = themeId;
+
+        BackgroundBrush = Fr(new SolidColorBrush(PluginTheme.EqBg));
+        GridPen = FrP(PluginTheme.EqGrid, 0.5);
+        GridPenMajor = FrP(PluginTheme.EqGridMajor, 0.5);
+        ZeroLinePen = FrP(PluginTheme.EqZeroLine, 1.0);
+        CurvePen = FrP(PluginTheme.EqCurve, 1.5);
+        LabelBrush = Fr(new SolidColorBrush(PluginTheme.EqLabel));
 
         var curveFill = new LinearGradientBrush(
-            Color.FromArgb(60, 0x5B, 0xA4, 0xE6),
-            Color.FromArgb(5, 0x5B, 0xA4, 0xE6),
+            Color.FromArgb(60, PluginTheme.DcAccent.R, PluginTheme.DcAccent.G, PluginTheme.DcAccent.B),
+            Color.FromArgb(5, PluginTheme.DcAccent.R, PluginTheme.DcAccent.G, PluginTheme.DcAccent.B),
             new Point(0, 0), new Point(0, 1));
         curveFill.Freeze();
         CurveFillBrush = curveFill;
@@ -100,6 +105,9 @@ public sealed class ParametricEqControl : FrameworkElement
         specStroke.Freeze();
         SpectrumStrokePen = specStroke;
     }
+
+    private static T Fr<T>(T b) where T : Freezable { b.Freeze(); return b; }
+    private static Pen FrP(Color c, double t) { var p = new Pen(new SolidColorBrush(c), t); p.Freeze(); return p; }
 
     // ── State ─────────────────────────────────────────────────────────────
 
@@ -177,6 +185,7 @@ public sealed class ParametricEqControl : FrameworkElement
 
     protected override void OnRender(DrawingContext dc)
     {
+        EnsureEqPalette();
         var w = ActualWidth;
         var h = ActualHeight;
         if (w < 10 || h < 10) return;

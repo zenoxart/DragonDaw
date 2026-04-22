@@ -5,17 +5,10 @@ namespace DAW.Views.Arrangement;
 
 /// <summary>
 /// High-performance pixel-perfect background grid for the arrangement timeline.
-/// 
-/// Improvements over original:
-/// • Pixel-snapped drawing for crisp lines
-/// • DPI-aware rendering
-/// • Optimized draw call batching
-/// • No subpixel positioning
+/// Reads theme colors dynamically from Application.Current.Resources.
 /// </summary>
 public sealed class PixelPerfectTimelineGridControl : FrameworkElement
 {
-    // ── Dependency Properties ──────────────────────────────────────────────────
-
     public static readonly DependencyProperty PixelsPerBeatProperty =
         DependencyProperty.Register(nameof(PixelsPerBeat), typeof(double),
             typeof(PixelPerfectTimelineGridControl),
@@ -64,30 +57,24 @@ public sealed class PixelPerfectTimelineGridControl : FrameworkElement
         set => SetValue(BeatsPerBarProperty, value);
     }
 
-    // ── Frozen pens for performance ────────────────────────────────────────────
-
-    private static readonly Pen s_beatPen = CreatePixelPerfectPen(Color.FromArgb(25, 255, 255, 255));
-    private static readonly Pen s_barPen = CreatePixelPerfectPen(Color.FromArgb(65, 255, 255, 255));
-    private static readonly Pen s_bar4Pen = CreatePixelPerfectPen(Color.FromArgb(110, 91, 164, 230));
-    private static readonly Pen s_trackSepPen = CreatePixelPerfectPen(Color.FromArgb(70, 255, 255, 255));
-
-    private static Pen CreatePixelPerfectPen(Color color)
-    {
-        var pen = new Pen(new SolidColorBrush(color), 1.0);
-        pen.Freeze();
-        return pen;
-    }
-
-    // ── Constructor ────────────────────────────────────────────────────────────
-    
     public PixelPerfectTimelineGridControl()
     {
-        // Enable pixel-perfect rendering
         UseLayoutRounding = true;
         SnapsToDevicePixels = true;
     }
 
-    // ── Rendering ──────────────────────────────────────────────────────────────
+    private static Color GetColor(string key)
+    {
+        if (Application.Current?.Resources[key] is SolidColorBrush b)
+            return b.Color;
+        return Colors.Gray;
+    }
+
+    private static Pen MakePen(Color c, byte alpha)
+    {
+        var color = Color.FromArgb(alpha, c.R, c.G, c.B);
+        return new Pen(new SolidColorBrush(color), 1.0);
+    }
 
     protected override void OnRender(DrawingContext dc)
     {
@@ -100,39 +87,43 @@ public sealed class PixelPerfectTimelineGridControl : FrameworkElement
 
         if (width <= 0 || height <= 0 || ppb <= 0) return;
 
-        // Use pixel snapping for all coordinates
         var dpiScale = VisualTreeHelper.GetDpi(this);
         double pixelWidth = 1.0 / dpiScale.DpiScaleX;
-        
-        // ── Draw vertical beat/bar lines ──────────────────────────────────────
-        bool drawBeatLines = ppb >= 4.0; // Skip beat lines when too dense
+
+        // Theme-adaptive grid lines
+        var borderColor = GetColor("BorderBrush");
+        var accentColor = GetColor("AccentLightBrush");
+        var beatPen = MakePen(borderColor, 25);
+        var barPen = MakePen(borderColor, 65);
+        var bar4Pen = MakePen(accentColor, 110);
+        var trackSepPen = MakePen(borderColor, 70);
+
+        bool drawBeatLines = ppb >= 4.0;
         int totalBeats = (int)(width / ppb) + 2;
 
         for (int beat = 0; beat <= totalBeats; beat++)
         {
-            // Pixel-snapped X coordinate
             double x = Math.Round(beat * ppb) + (pixelWidth * 0.5);
-            
+
             bool isBar = beat % beatsPerBar == 0;
             bool isBar4 = isBar && beat % (beatsPerBar * 4) == 0;
 
             Pen pen;
-            if (isBar4) pen = s_bar4Pen;
-            else if (isBar) pen = s_barPen;
-            else if (drawBeatLines) pen = s_beatPen;
+            if (isBar4) pen = bar4Pen;
+            else if (isBar) pen = barPen;
+            else if (drawBeatLines) pen = beatPen;
             else continue;
 
             dc.DrawLine(pen, new Point(x, 0), new Point(x, height));
         }
 
-        // ── Draw horizontal track separators ──────────────────────────────────
         if (trackHeight > 0)
         {
             int trackCount = TrackCount;
             for (int i = 1; i <= trackCount; i++)
             {
                 double y = Math.Round(i * trackHeight) + (pixelWidth * 0.5);
-                dc.DrawLine(s_trackSepPen, new Point(0, y), new Point(width, y));
+                dc.DrawLine(trackSepPen, new Point(0, y), new Point(width, y));
             }
         }
     }

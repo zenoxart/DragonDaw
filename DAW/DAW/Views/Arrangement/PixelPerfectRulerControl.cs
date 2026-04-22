@@ -6,11 +6,7 @@ namespace DAW.Views.Arrangement;
 
 /// <summary>
 /// Pixel-perfect scrollable ruler that displays bar numbers and beat tick-marks.
-/// 
-/// Improvements:
-/// • Pixel-snapped rendering for crisp lines
-/// • DPI-aware coordinate calculations
-/// • UseLayoutRounding for consistency
+/// Reads theme colors from Application.Current.Resources for dynamic theme support.
 /// </summary>
 public sealed class PixelPerfectRulerControl : FrameworkElement
 {
@@ -38,37 +34,16 @@ public sealed class PixelPerfectRulerControl : FrameworkElement
         set => SetValue(BeatsPerBarProperty, value);
     }
 
-    // ── Frozen resources ───────────────────────────────────────────────────────
+    private static readonly Typeface s_face = new("Segoe UI");
 
-    private static readonly Brush s_bgBrush  = MakeFrozenBrush(Color.FromRgb(22, 27, 34));
-    private static readonly Pen   s_barPen   = MakePen(Color.FromRgb(91, 164, 230), 1.0);
-    private static readonly Pen   s_beatPen  = MakePen(Color.FromArgb(100, 136, 153, 170), 1.0);
-    private static readonly Brush s_barLabel = MakeFrozenBrush(Color.FromRgb(91, 164, 230));
-    private static readonly Typeface s_face  = new("Segoe UI");
-
-    private static Brush MakeFrozenBrush(Color c)
-    {
-        var b = new SolidColorBrush(c);
-        b.Freeze();
-        return b;
-    }
-
-    private static Pen MakePen(Color c, double thickness)
-    {
-        var pen = new Pen(new SolidColorBrush(c), thickness);
-        pen.Freeze();
-        return pen;
-    }
-
-    // ── Constructor ────────────────────────────────────────────────────────────
-    
     public PixelPerfectRulerControl()
     {
         UseLayoutRounding = true;
         SnapsToDevicePixels = true;
     }
 
-    // ── Rendering ──────────────────────────────────────────────────────────────
+    private static Brush GetBrush(string key) =>
+        Application.Current?.Resources[key] as SolidColorBrush ?? Brushes.Gray;
 
     protected override void OnRender(DrawingContext dc)
     {
@@ -80,15 +55,22 @@ public sealed class PixelPerfectRulerControl : FrameworkElement
 
         if (ppb <= 0 || width <= 0) return;
 
-        // DPI-aware pixel snapping
         var dpiScale = VisualTreeHelper.GetDpi(this);
         double pixelWidth = 1.0 / dpiScale.DpiScaleX;
 
-        dc.DrawRectangle(s_bgBrush, null, new Rect(0, 0, width, height));
+        // Theme-aware colors
+        var bgBrush = GetBrush("PanelBg");
+        var accentBrush = GetBrush("AccentLightBrush");
+        var textSecBrush = GetBrush("TextSecondary");
+        var barPen = new Pen(accentBrush, 1.0);
+        var beatPen = new Pen(textSecBrush, 1.0) { DashStyle = null };
+        beatPen.Brush = textSecBrush.Clone();
+        ((SolidColorBrush)beatPen.Brush).Opacity = 0.4;
+
+        dc.DrawRectangle(bgBrush, null, new Rect(0, 0, width, height));
 
         double pixelsPerBar = ppb * bpb;
 
-        // Auto-thin bar labels to prevent overlap
         int labelStep = 1;
         if      (pixelsPerBar < 8)   labelStep = 32;
         else if (pixelsPerBar < 16)  labelStep = 16;
@@ -100,13 +82,10 @@ public sealed class PixelPerfectRulerControl : FrameworkElement
 
         for (int bar = 0; bar < totalBars; bar++)
         {
-            // Pixel-snapped bar position
             double barX = Math.Round(bar * pixelsPerBar) + (pixelWidth * 0.5);
 
-            // Major bar tick
-            dc.DrawLine(s_barPen, new Point(barX, height * 0.25), new Point(barX, height));
+            dc.DrawLine(barPen, new Point(barX, height * 0.25), new Point(barX, height));
 
-            // Bar number (1-based)
             if (bar % labelStep == 0)
             {
                 var ft = new FormattedText(
@@ -115,22 +94,20 @@ public sealed class PixelPerfectRulerControl : FrameworkElement
                     FlowDirection.LeftToRight,
                     s_face,
                     10.0,
-                    s_barLabel,
+                    accentBrush,
                     dpiScale.PixelsPerDip);
 
                 double textX = Math.Round(barX - ft.Width * 0.5);
                 double textY = Math.Round(2.0);
-                
                 dc.DrawText(ft, new Point(textX, textY));
             }
 
-            // Beat ticks within this bar (if space permits)
             if (ppb >= 8.0)
             {
                 for (int beat = 1; beat < bpb; beat++)
                 {
                     double beatX = Math.Round(barX + beat * ppb) + (pixelWidth * 0.5);
-                    dc.DrawLine(s_beatPen, new Point(beatX, height * 0.5), new Point(beatX, height));
+                    dc.DrawLine(beatPen, new Point(beatX, height * 0.5), new Point(beatX, height));
                 }
             }
         }

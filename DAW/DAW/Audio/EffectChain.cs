@@ -55,6 +55,14 @@ public class EffectChain : INotifyPropertyChanged
     /// </summary>
     public int EffectCount => _effectsSnapshot.Length;
 
+    /// <summary>
+    /// Total algorithmic latency of this chain in samples (sum of all enabled effects'
+    /// <see cref="AudioEffect.LatencySamples"/>).  Used by the routing engine for
+    /// Plugin Delay Compensation (PDC).
+    /// </summary>
+    public int TotalLatencySamples
+        => _effectsSnapshot.Where(e => e.IsEnabled).Sum(e => e.LatencySamples);
+
     private void UpdateSnapshot()
     {
         lock (_modifyLock)

@@ -246,6 +246,20 @@ public sealed class EnhancedProjectService
         // Export tracks
         project.Tracks.Clear();
         project.Files.Clear();
+        project.MixerChannelLayout.Clear();
+
+        // Export mixer channel display order and routing
+        for (int i = 0; i < mainViewModel.MixerChannels.Count; i++)
+        {
+            var ch = mainViewModel.MixerChannels[i];
+            project.MixerChannelLayout.Add(new ProjectMixerChannelData
+            {
+                ChannelNumber  = ch.ChannelNumber,
+                DisplayOrder   = i,
+                SourceTrackId  = ch.SourceTrack?.TrackNumber.ToString(),
+                SendTargets    = ch.SendTargets.ToList()
+            });
+        }
         
         foreach (var track in mainViewModel.Tracks)
         {
@@ -368,7 +382,25 @@ public sealed class EnhancedProjectService
                 {
                     RoomSize = rev.RoomSize,
                     Damping = rev.Damping,
-                    WetLevel = rev.WetLevel
+                    WetLevel = rev.WetLevel,
+                    Mix = rev.Mix,
+                    PreDelay = rev.PreDelay,
+                    Depth = rev.Depth,
+                    ReverbMode = rev.ReverbMode,
+                    EarlySize = rev.EarlySize,
+                    EarlyDiffusion = rev.EarlyDiffusion,
+                    EarlyCross = rev.EarlyCross,
+                    EarlySend = rev.EarlySend,
+                    EarlyModRate = rev.EarlyModRate,
+                    EarlyModDepth = rev.EarlyModDepth,
+                    LateSize = rev.LateSize,
+                    LateCross = rev.LateCross,
+                    Decay = rev.Decay,
+                    BassMult = rev.BassMult,
+                    BassXover = rev.BassXover,
+                    HighCut = rev.HighCut,
+                    HighShelf = rev.HighShelf,
+                    LowShelf = rev.LowShelf
                 };
                 break;
                 
@@ -441,9 +473,36 @@ public sealed class EnhancedProjectService
                 break;
                 
             case ReverbEffect rev when projectEffect.Reverb != null:
-                rev.RoomSize = projectEffect.Reverb.RoomSize;
-                rev.Damping = projectEffect.Reverb.Damping;
-                rev.WetLevel = projectEffect.Reverb.WetLevel;
+                var rp = projectEffect.Reverb;
+                // Check if this is a new-style project (has non-default Mix)
+                if (rp.Mix > 0 || rp.EarlySize > 0 || rp.Decay > 0.1)
+                {
+                    rev.Mix = rp.Mix;
+                    rev.PreDelay = rp.PreDelay;
+                    rev.Depth = rp.Depth;
+                    rev.ReverbMode = rp.ReverbMode;
+                    rev.EarlySize = rp.EarlySize;
+                    rev.EarlyDiffusion = rp.EarlyDiffusion;
+                    rev.EarlyCross = rp.EarlyCross;
+                    rev.EarlySend = rp.EarlySend;
+                    rev.EarlyModRate = rp.EarlyModRate;
+                    rev.EarlyModDepth = rp.EarlyModDepth;
+                    rev.LateSize = rp.LateSize;
+                    rev.LateCross = rp.LateCross;
+                    rev.Decay = rp.Decay;
+                    rev.BassMult = rp.BassMult;
+                    rev.BassXover = rp.BassXover;
+                    rev.HighCut = rp.HighCut;
+                    rev.HighShelf = rp.HighShelf;
+                    rev.LowShelf = rp.LowShelf;
+                }
+                else
+                {
+                    // Legacy project: map old params to new
+                    rev.RoomSize = rp.RoomSize;
+                    rev.Damping = rp.Damping;
+                    rev.WetLevel = rp.WetLevel;
+                }
                 break;
                 
             case DelayEffect delay when projectEffect.Delay != null:
@@ -565,6 +624,40 @@ public sealed class EnhancedProjectService
 
             mainViewModel.Tracks.Add(track);
             await ImportClipsForTrack(projectTrack, track, mainViewModel);
+        }
+
+        // ── Restore mixer channel routing and display order ───────────────
+        if (project.MixerChannelLayout.Count > 0)
+        {
+            // Apply send targets
+            foreach (var layout in project.MixerChannelLayout)
+            {
+                var ch = mainViewModel.MixerChannels
+                    .FirstOrDefault(c => c.SourceTrack?.TrackNumber.ToString() == layout.SourceTrackId
+                                      || (layout.SourceTrackId == null && c.SourceTrack == null && c.ChannelNumber == layout.ChannelNumber));
+                if (ch == null) continue;
+
+                ch.SendTargets.Clear();
+                foreach (var target in layout.SendTargets)
+                    ch.AddSend(target);
+            }
+
+            // Restore display order
+            var ordered = project.MixerChannelLayout
+                .OrderBy(l => l.DisplayOrder)
+                .Select(l => mainViewModel.MixerChannels
+                    .FirstOrDefault(c => c.SourceTrack?.TrackNumber.ToString() == l.SourceTrackId
+                                      || (l.SourceTrackId == null && c.SourceTrack == null && c.ChannelNumber == l.ChannelNumber)))
+                .Where(c => c != null)
+                .Cast<DAW.Models.Mixer.MixerChannel>()
+                .ToList();
+
+            for (int i = 0; i < ordered.Count; i++)
+            {
+                int current = mainViewModel.MixerChannels.IndexOf(ordered[i]);
+                if (current != i && current >= 0)
+                    mainViewModel.MixerChannels.Move(current, i);
+            }
         }
     }
 

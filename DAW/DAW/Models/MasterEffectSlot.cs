@@ -1,17 +1,20 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using DAW.Audio;
 using DAW.Audio.Effects;
 
 namespace DAW.Models;
 
 /// <summary>
 /// Represents a single effect slot in the master effects rack.
+/// When an effect is set/cleared, it is automatically added/removed from the master EffectChain.
 /// </summary>
 public class MasterEffectSlot : INotifyPropertyChanged
 {
     private AudioEffect? _effect;
     private bool _isExpanded;
     private int _slotNumber;
+    private EffectChain? _ownerChain;
 
     public MasterEffectSlot(int slotNumber)
     {
@@ -19,49 +22,44 @@ public class MasterEffectSlot : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Slot number (1-10).
+    /// Links this slot to the master EffectChain so changes propagate to the audio pipeline.
     /// </summary>
+    internal void SetOwnerChain(EffectChain chain) => _ownerChain = chain;
+
     public int SlotNumber
     {
         get => _slotNumber;
         set => SetField(ref _slotNumber, value);
     }
 
-    /// <summary>
-    /// The effect in this slot (null if empty).
-    /// </summary>
     public AudioEffect? Effect
     {
         get => _effect;
         set
         {
-            if (SetField(ref _effect, value))
-            {
-                OnPropertyChanged(nameof(HasEffect));
-                OnPropertyChanged(nameof(DisplayName));
-                OnPropertyChanged(nameof(Icon));
-            }
+            if (_effect == value) return;
+
+            // Remove old effect from audio chain
+            if (_effect != null)
+                _ownerChain?.RemoveEffect(_effect);
+
+            _effect = value;
+
+            // Add new effect to audio chain
+            if (_effect != null)
+                _ownerChain?.AddEffect(_effect);
+
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasEffect));
+            OnPropertyChanged(nameof(DisplayName));
+            OnPropertyChanged(nameof(Icon));
         }
     }
 
-    /// <summary>
-    /// Whether this slot has an effect.
-    /// </summary>
     public bool HasEffect => _effect != null;
-
-    /// <summary>
-    /// Display name for the slot.
-    /// </summary>
     public string DisplayName => _effect?.Name ?? $"Slot {_slotNumber}";
-
-    /// <summary>
-    /// Icon for the slot.
-    /// </summary>
     public string Icon => _effect?.Icon ?? "➕";
 
-    /// <summary>
-    /// Whether the effect panel is expanded.
-    /// </summary>
     public bool IsExpanded
     {
         get => _isExpanded;
@@ -71,9 +69,7 @@ public class MasterEffectSlot : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 
     protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
-    {
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-    }
+        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
     protected bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
     {

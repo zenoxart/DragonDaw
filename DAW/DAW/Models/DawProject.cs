@@ -56,6 +56,11 @@ public sealed class DawProject
     public MasterChannelData MasterChannel { get; set; } = new();
 
     /// <summary>
+    /// Mixer channel layout: display order and routing sends (persisted across saves).
+    /// </summary>
+    public List<ProjectMixerChannelData> MixerChannelLayout { get; set; } = [];
+
+    /// <summary>
     /// Project-wide automation data
     /// </summary>
     public List<AutomationClip> Automation { get; set; } = [];
@@ -405,16 +410,40 @@ public sealed class CompressorParameters
 }
 
 /// <summary>
-/// Reverb parameters
+/// Reverb parameters (Valhalla Room–style)
 /// </summary>
 public sealed class ReverbParameters
 {
-    public double RoomSize { get; set; } = 0.5; // 0 to 1
+    // Legacy (backward compat)
+    public double RoomSize { get; set; } = 0.5;
     public double Damping { get; set; } = 0.5;
     public double WetLevel { get; set; } = 0.3;
     public double DryLevel { get; set; } = 0.7;
-    public double PreDelay { get; set; } = 20.0; // ms
     public double Width { get; set; } = 1.0;
+
+    // Global
+    public double Mix { get; set; } = 0.35;
+    public double PreDelay { get; set; } = 20.0;
+    public double Depth { get; set; } = 0.5;
+    public int ReverbMode { get; set; }
+
+    // Early Reflections
+    public double EarlySize { get; set; } = 0.5;
+    public double EarlyDiffusion { get; set; } = 0.7;
+    public double EarlyCross { get; set; } = 0.3;
+    public double EarlySend { get; set; } = 0.6;
+    public double EarlyModRate { get; set; } = 0.8;
+    public double EarlyModDepth { get; set; } = 0.3;
+
+    // Late Reverberation
+    public double LateSize { get; set; } = 0.5;
+    public double LateCross { get; set; } = 0.3;
+    public double Decay { get; set; } = 2.0;
+    public double BassMult { get; set; } = 1.0;
+    public double BassXover { get; set; } = 200.0;
+    public double HighCut { get; set; } = 8000.0;
+    public double HighShelf { get; set; } = -3.0;
+    public double LowShelf { get; set; }
 }
 
 /// <summary>
@@ -541,4 +570,25 @@ public sealed class ProjectColor
     {
         return color.ToMediaColor();
     }
+}
+
+/// <summary>
+/// Persists one mixer channel's display order and send routing in the .dragon file.
+/// </summary>
+public sealed class ProjectMixerChannelData
+{
+    /// <summary>The channel's assigned channel number.</summary>
+    public int ChannelNumber { get; set; }
+
+    /// <summary>Zero-based position in the mixer strip order.</summary>
+    public int DisplayOrder { get; set; }
+
+    /// <summary>
+    /// TrackNumber (as string) of the source track linked to this channel.
+    /// Null for empty (FX-only) channels.
+    /// </summary>
+    public string? SourceTrackId { get; set; }
+
+    /// <summary>Channel numbers this channel explicitly sends to (routing graph).</summary>
+    public List<int> SendTargets { get; set; } = [];
 }

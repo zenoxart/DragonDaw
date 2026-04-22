@@ -6,7 +6,7 @@
         Height="700" Width="1000"
         MinHeight="500" MinWidth="800"
         WindowStartupLocation="CenterOwner"
-        Background="#0D1117">
+        Background="{DynamicResource DarkBg}">
     
     <Window.Resources>
         <SolidColorBrush x:Key="AccentBrush" Color="#26619C"/>

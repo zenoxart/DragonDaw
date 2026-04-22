@@ -22,10 +22,4 @@
     <Resource Include="Assets\dragondawicon.png" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Content Include="Assets\Audio\DragonSound.wav">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
-
 </Project>

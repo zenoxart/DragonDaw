@@ -154,6 +154,20 @@ namespace DAW.Views
     }
 
     /// <summary>
+    /// Converts IsCompactMode bool to channel width (compact=50, expanded=75).
+    /// </summary>
+    public class CompactWidthConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            return value is true ? 50.0 : 75.0;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+            => throw new NotImplementedException();
+    }
+
+    /// <summary>
     /// The main mixer view displaying all track channel strips.
     /// </summary>
     public partial class MixerView : UserControl
@@ -161,13 +175,174 @@ namespace DAW.Views
         // Default values for reset
         private const double DefaultMasterVolume = 0.8;
         private const double DefaultMasterPan = 0.0;
-        
+
+        public static readonly DependencyProperty IsCompactModeProperty =
+            DependencyProperty.Register(nameof(IsCompactMode), typeof(bool), typeof(MixerView),
+                new PropertyMetadata(false));
+
+        public bool IsCompactMode
+        {
+            get => (bool)GetValue(IsCompactModeProperty);
+            set => SetValue(IsCompactModeProperty, value);
+        }
+
+        public static readonly DependencyProperty ShowMasterFxProperty =
+            DependencyProperty.Register(nameof(ShowMasterFx), typeof(bool), typeof(MixerView),
+                new PropertyMetadata(false));
+
+        public bool ShowMasterFx
+        {
+            get => (bool)GetValue(ShowMasterFxProperty);
+            set => SetValue(ShowMasterFxProperty, value);
+        }
+
         public MixerView()
         {
             InitializeComponent();
+
+            Loaded += (s, e) =>
+            {
+                SubscribeToRoutingChanges();
+                Dispatcher.InvokeAsync(RedrawRoutingCables, System.Windows.Threading.DispatcherPriority.Loaded);
+            };
+
+            DataContextChanged += (s, e) =>
+            {
+                SubscribeToRoutingChanges();
+                Dispatcher.InvokeAsync(RedrawRoutingCables, System.Windows.Threading.DispatcherPriority.Loaded);
+            };
         }
         
         private MainViewModel? ViewModel => DataContext as MainViewModel;
+
+        // ── View Switching (Mixer / Patchbay) ──────────────────────────────
+        
+        public static readonly DependencyProperty ShowPatchbayProperty =
+            DependencyProperty.Register(nameof(ShowPatchbay), typeof(bool), typeof(MixerView),
+                new PropertyMetadata(false));
+
+        public bool ShowPatchbay
+        {
+            get => (bool)GetValue(ShowPatchbayProperty);
+            set => SetValue(ShowPatchbayProperty, value);
+        }
+
+        private void OnShowMixerView(object sender, MouseButtonEventArgs e)
+        {
+            ShowPatchbay = false;
+            if (ViewModel != null)
+                ViewModel.StatusMessage = "🎚️ Mixer-Ansicht";
+        }
+
+        private void OnShowPatchbayView(object sender, MouseButtonEventArgs e)
+        {
+            ShowPatchbay = true;
+            if (ViewModel != null)
+                ViewModel.StatusMessage = "🔌 Patchbay-Ansicht";
+        }
+
+        private void ToggleCompactMode(object sender, RoutedEventArgs e)
+        {
+            IsCompactMode = !IsCompactMode;
+            if (ViewModel != null)
+                ViewModel.StatusMessage = IsCompactMode ? "Compact-Ansicht" : "Erweiterte Ansicht";
+        }
+
+        private void OnShowChannelFx(object sender, MouseButtonEventArgs e) => ShowMasterFx = false;
+        private void OnShowMasterFx(object sender, MouseButtonEventArgs e) => ShowMasterFx = true;
+
+        private void OnAddFxToActivePanel(object sender, RoutedEventArgs e)
+        {
+            if (ShowMasterFx)
+                OnMasterSlotAddFirst();
+            else
+                OnAddEffect(sender, e);
+        }
+
+        private void OnMasterSlotAddFirst()
+        {
+            if (ViewModel == null) return;
+            var slot = ViewModel.MasterEffectSlots.FirstOrDefault(s => !s.HasEffect);
+            if (slot == null) { ViewModel.StatusMessage = "✗ Keine freien Master-Slots"; return; }
+            OpenMasterPluginSearch(slot.SlotNumber);
+        }
+
+        private void OnMasterSlotAdd(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn)
+            {
+                int? num = btn.Tag switch { int i => i, string s when int.TryParse(s, out var p) => p, _ => null };
+                if (num.HasValue) OpenMasterPluginSearch(num.Value);
+            }
+        }
+
+        private void OpenMasterPluginSearch(int slotNumber)
+        {
+            if (ViewModel == null) return;
+            // Use the same CommandPalette but without a track (master bus)
+            var palette = new Plugins.CommandPalette(null)
+            {
+                Owner = Window.GetWindow(this),
+                WindowStartupLocation = WindowStartupLocation.CenterOwner
+            };
+            if (palette.ShowDialog() == true && palette.SelectedPlugin != null)
+            {
+                var slot = ViewModel.MasterEffectSlots.FirstOrDefault(s => s.SlotNumber == slotNumber);
+                if (slot != null && !slot.HasEffect)
+                {
+                    try
+                    {
+                        var effect = palette.SelectedPlugin.Factory();
+                        if (effect != null)
+                        {
+                            effect.IsExpanded = true;
+                            slot.Effect = effect;
+                            palette.SelectedPlugin.UsageCount++;
+                            palette.SelectedPlugin.LastUsed = DateTime.Now;
+                            ViewModel.StatusMessage = $"✓ {effect.Name} → Master Slot {slotNumber}";
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        ViewModel.StatusMessage = $"✗ Fehler: {ex.Message}";
+                    }
+                }
+            }
+        }
+
+        private void OnMasterSlotRemove(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && ViewModel != null)
+            {
+                int? num = btn.Tag switch { int i => i, string s when int.TryParse(s, out var p) => p, _ => null };
+                if (!num.HasValue) return;
+                var slot = ViewModel.MasterEffectSlots.FirstOrDefault(s => s.SlotNumber == num.Value);
+                if (slot?.Effect != null)
+                {
+                    var name = slot.DisplayName;
+                    slot.Effect = null;
+                    slot.IsExpanded = false;
+                    ViewModel.StatusMessage = $"✓ {name} aus Master Slot {num.Value} entfernt";
+                }
+            }
+        }
+
+        private void OnMasterSlotOpen(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is not FrameworkElement el || ViewModel == null) return;
+            int? num = el.Tag switch { int i => i, string s when int.TryParse(s, out var p) => p, _ => null };
+            if (!num.HasValue) return;
+            var slot = ViewModel.MasterEffectSlots.FirstOrDefault(s => s.SlotNumber == num.Value);
+            if (slot?.Effect is not { } effect) return;
+
+            var pluginDef = Plugins.PluginManager.Instance.Plugins.FirstOrDefault(p => p.Name == effect.Name)
+                ?? new Plugins.PluginDefinition
+                {
+                    Id = effect.EffectType, Name = effect.Name, Category = "Effect",
+                    Icon = effect.Icon, Description = effect.Name, Factory = () => effect
+                };
+            Plugins.PluginWindow.Show(effect, pluginDef, null, Window.GetWindow(this));
+        }
         
         #region Fader Reset Handlers
         
@@ -385,6 +560,7 @@ namespace DAW.Views
         {
             try
             {
+                if (_isDragging) return;
                 if (sender is not FrameworkElement element) return;
                 if (ViewModel?.SelectedTrack is not { } track) return;
                 
@@ -411,13 +587,8 @@ namespace DAW.Views
                         Description = effect.Name,
                         Factory = () => effect
                     };
-                
-                var pluginWindow = new Plugins.PluginWindow(effect, pluginDef, track)
-                {
-                    Owner = Window.GetWindow(this),
-                    WindowStartupLocation = WindowStartupLocation.CenterOwner
-                };
-                pluginWindow.Show();
+
+                Plugins.PluginWindow.Show(effect, pluginDef, track, Window.GetWindow(this));
             }
             catch (Exception ex)
             {
@@ -726,52 +897,195 @@ namespace DAW.Views
             _isDragging = false;
         }
 
-        /// <summary>Handles drop of an effect slot onto a mixer channel strip.</summary>
+        #endregion
+
+        // ── Horizontal Scrolling with Mousewheel ────────────────────────────
+
+        private void MixerScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if (sender is ScrollViewer scrollViewer)
+            {
+                // Scroll horizontally instead of vertically
+                double offset = scrollViewer.HorizontalOffset - (e.Delta / 3.0);
+                scrollViewer.ScrollToHorizontalOffset(offset);
+                e.Handled = true;
+            }
+        }
+
+        // ── Effect Reordering with Mousewheel ──────────────────────────────
+
+        private void EffectSlot_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if (sender is FrameworkElement element && 
+                element.Tag is int slotNumber &&
+                ViewModel?.SelectedTrack?.EffectChain is { } chain)
+            {
+                var slot = ViewModel.SelectedTrack.EffectSlots.FirstOrDefault(s => s.SlotNumber == slotNumber);
+                if (slot?.Effect == null) return;
+
+                var effects = chain.Effects.ToList();
+                int currentIndex = effects.IndexOf(slot.Effect);
+                if (currentIndex < 0) return;
+
+                int newIndex;
+                if (e.Delta > 0) // Scroll up = move up (toward slot 1)
+                {
+                    newIndex = currentIndex == 0 ? effects.Count - 1 : currentIndex - 1;
+                }
+                else // Scroll down = move down (toward last slot)
+                {
+                    newIndex = currentIndex == effects.Count - 1 ? 0 : currentIndex + 1;
+                }
+
+                // Reorder
+                effects.RemoveAt(currentIndex);
+                effects.Insert(newIndex, slot.Effect);
+
+                // Rebuild effect chain
+                chain.Effects.Clear();
+                foreach (var fx in effects)
+                    chain.AddEffect(fx);
+
+                ViewModel.StatusMessage = $"↕ {slot.Effect.Name} → Slot {newIndex + 1}";
+                e.Handled = true;
+            }
+        }
+
+        // ── FL Studio-Style Mixer Routing ──────────────────────────────────
+
+        /// <summary>
+        /// Adds a new empty mixer channel.
+        /// </summary>
+        private void AddEmptyChannel_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel?.AddEmptyMixerChannel();
+        }
+
+        /// <summary>
+        /// Selects a mixer channel for routing.
+        /// </summary>
+        private void MixerChannel_Click(object sender, MouseButtonEventArgs e)
+        {
+            _dragStartPoint = e.GetPosition(null);
+            _reorderDragFromTitle = IsOriginatingFromTitle(e.OriginalSource);
+
+            if (sender is Border { Tag: Models.Mixer.MixerChannel channel })
+            {
+                if (ViewModel != null)
+                {
+                    ViewModel.SelectedMixerChannel = channel;
+                    ViewModel.StatusMessage = $"Channel {channel.ChannelNumber} ausgewählt – Ziehe OUT→IN zum Routen, Titel zum Verschieben";
+                }
+                e.Handled = true;
+            }
+        }
+
+        private static bool IsOriginatingFromTitle(object? originalSource)
+        {
+            var el = originalSource as System.Windows.Media.Visual;
+            while (el != null)
+            {
+                if (el is FrameworkElement fe && fe.Tag as string == "CHANNEL_TITLE")
+                    return true;
+                el = System.Windows.Media.VisualTreeHelper.GetParent(el) as System.Windows.Media.Visual;
+            }
+            return false;
+        }
+
+        private void RoutingTarget_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button { Tag: Models.Mixer.MixerChannel targetChannel } &&
+                ViewModel?.SelectedMixerChannel is { } sourceChannel)
+            {
+                ViewModel.ToggleChannelRouting(sourceChannel, targetChannel);
+                e.Handled = true;
+            }
+        }
+
+        // ── Channel Reorder Drag & Drop ────────────────────────────────────
+
+        private const string ChannelReorderFormat = "DAW_ChannelReorder";
+        private bool _isChannelReorderDrag;
+        private bool _reorderDragFromTitle;
+
+        private void MixerChannel_HeaderMouseMove(object sender, MouseEventArgs e)
+        {
+            if (e.LeftButton != MouseButtonState.Pressed) return;
+            if (_isRoutingDrag || _isChannelReorderDrag) return;
+            if (!_reorderDragFromTitle) return; // only drag when initiated from title
+            if (sender is not Border { Tag: Models.Mixer.MixerChannel channel } border) return;
+
+            var diff = e.GetPosition(null) - _dragStartPoint;
+            if (Math.Abs(diff.X) < SystemParameters.MinimumHorizontalDragDistance &&
+                Math.Abs(diff.Y) < SystemParameters.MinimumVerticalDragDistance)
+                return;
+
+            _isChannelReorderDrag = true;
+            DragDrop.DoDragDrop(border, new DataObject(ChannelReorderFormat, channel), DragDropEffects.Move);
+            _isChannelReorderDrag = false;
+        }
+
+        /// <summary>Handles drop of an effect slot OR a channel-reorder onto a mixer channel strip.</summary>
         private void MixerChannel_Drop(object sender, DragEventArgs e)
         {
+            // ── Channel reorder ──────────────────────────────────────────
+            if (e.Data.GetDataPresent(ChannelReorderFormat))
+            {
+                if (e.Data.GetData(ChannelReorderFormat) is not Models.Mixer.MixerChannel draggedChannel) return;
+
+                // Find the target MixerChannel from the drop target's Tag
+                Models.Mixer.MixerChannel? targetChannel = null;
+                var el = sender as FrameworkElement;
+                while (el != null)
+                {
+                    if (el.Tag is Models.Mixer.MixerChannel mc) { targetChannel = mc; break; }
+                    el = System.Windows.Media.VisualTreeHelper.GetParent(el) as FrameworkElement;
+                }
+
+                if (targetChannel != null && targetChannel != draggedChannel && ViewModel != null)
+                {
+                    int targetIndex = ViewModel.MixerChannels.IndexOf(targetChannel);
+                    ViewModel.MoveMixerChannel(draggedChannel, targetIndex);
+                }
+
+                e.Handled = true;
+                return;
+            }
+
+            // ── Effect slot copy ─────────────────────────────────────────
             if (!e.Data.GetDataPresent(EffectSlotDragFormat)) return;
             if (e.Data.GetData(EffectSlotDragFormat) is not EffectSlot sourceSlot) return;
             if (sourceSlot.Effect is null) return;
 
-            // Find the target track from the channel control's DataContext
             Track? targetTrack = null;
             if (sender is FrameworkElement fe)
             {
                 var current = fe;
                 while (current != null)
                 {
-                    if (current.DataContext is Track t)
-                    {
-                        targetTrack = t;
-                        break;
-                    }
-                    current = current.Parent as FrameworkElement ?? 
+                    if (current.DataContext is Track t) { targetTrack = t; break; }
+                    current = current.Parent as FrameworkElement ??
                               System.Windows.Media.VisualTreeHelper.GetParent(current) as FrameworkElement;
                 }
             }
 
             if (targetTrack is null) return;
 
-            // Find first empty slot on target track
             var emptySlot = targetTrack.EffectSlots.FirstOrDefault(s => !s.HasEffect);
             if (emptySlot is null)
             {
-                if (ViewModel != null)
-                    ViewModel.StatusMessage = "✗ Kein freier Slot im Ziel-Track";
+                if (ViewModel != null) ViewModel.StatusMessage = "✗ Kein freier Slot im Ziel-Track";
                 return;
             }
 
-            // Clone the effect with all settings
             var clonedEffect = sourceSlot.Effect.Clone();
             if (clonedEffect is null)
             {
-                if (ViewModel != null)
-                    ViewModel.StatusMessage = "✗ Effekt konnte nicht kopiert werden";
+                if (ViewModel != null) ViewModel.StatusMessage = "✗ Effekt konnte nicht kopiert werden";
                 return;
             }
 
             emptySlot.Effect = clonedEffect;
-
             if (ViewModel != null)
                 ViewModel.StatusMessage = $"✓ {clonedEffect.Name} nach {targetTrack.Title} Slot {emptySlot.SlotNumber} kopiert";
 
@@ -780,12 +1094,358 @@ namespace DAW.Views
 
         private void MixerChannel_DragOver(object sender, DragEventArgs e)
         {
-            e.Effects = e.Data.GetDataPresent(EffectSlotDragFormat)
-                ? DragDropEffects.Copy
+            e.Effects = (e.Data.GetDataPresent(EffectSlotDragFormat) || e.Data.GetDataPresent(ChannelReorderFormat))
+                ? DragDropEffects.Move
                 : DragDropEffects.None;
             e.Handled = true;
         }
 
-        #endregion
+        // ── Routing Cable Drag & Draw ───────────────────────────────────────
+
+        private bool _isRoutingDrag;
+        private Models.Mixer.MixerChannel? _routingSourceChannel;
+        private Point _routingDragStartOnOverlay;
+        private System.Windows.Shapes.Path? _routingDragPath;
+
+        private void SubscribeToRoutingChanges()
+        {
+            if (ViewModel?.MixerChannels is not System.Collections.ObjectModel.ObservableCollection<Models.Mixer.MixerChannel> channels)
+                return;
+
+            channels.CollectionChanged -= OnRoutingCollectionChanged;
+            channels.CollectionChanged += OnRoutingCollectionChanged;
+
+            foreach (var ch in channels)
+            {
+                ch.SendTargets.CollectionChanged -= OnRoutingSendTargetsChanged;
+                ch.SendTargets.CollectionChanged += OnRoutingSendTargetsChanged;
+            }
+        }
+
+        private void OnRoutingCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        {
+            SubscribeToRoutingChanges();
+            Dispatcher.InvokeAsync(RedrawRoutingCables, System.Windows.Threading.DispatcherPriority.Render);
+        }
+
+        private void OnRoutingSendTargetsChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        {
+            Dispatcher.InvokeAsync(RedrawRoutingCables, System.Windows.Threading.DispatcherPriority.Render);
+        }
+
+        private void MixerScrollViewer_RoutingMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            // Walk up from the original source to find an element tagged IO_SOCKET
+            var outSocket = FindTaggedAncestorOrSelf(e.OriginalSource as DependencyObject, "IO_SOCKET");
+            if (outSocket == null) return;
+
+            var channel = FindMixerChannelFromElement(outSocket);
+            if (channel == null) return;
+
+            var overlay = FindName("RoutingOverlay") as Canvas;
+            if (overlay == null) return;
+
+            _isRoutingDrag = true;
+            _routingSourceChannel = channel;
+
+            try
+            {
+                _routingDragStartOnOverlay = outSocket.TranslatePoint(
+                    new Point(outSocket.ActualWidth / 2, outSocket.ActualHeight / 2), overlay);
+            }
+            catch
+            {
+                _isRoutingDrag = false;
+                return;
+            }
+
+            _routingDragPath = CreateRoutingPath(_routingDragStartOnOverlay, _routingDragStartOnOverlay, channel.Color, true);
+            overlay.Children.Add(_routingDragPath);
+
+            ((ScrollViewer)sender).CaptureMouse();
+        }
+
+        private void MixerScrollViewer_RoutingMouseMove(object sender, MouseEventArgs e)
+        {
+            if (!_isRoutingDrag || _routingDragPath == null) return;
+
+            var overlay = FindName("RoutingOverlay") as Canvas;
+            if (overlay == null) return;
+
+            UpdateRoutingPath(_routingDragPath, _routingDragStartOnOverlay, e.GetPosition(overlay));
+        }
+
+        private void MixerScrollViewer_RoutingMouseUp(object sender, MouseButtonEventArgs e)
+        {
+            if (!_isRoutingDrag) return;
+
+            var scrollViewer = (ScrollViewer)sender;
+            var overlay = FindName("RoutingOverlay") as Canvas;
+
+            if (overlay != null && _routingDragPath != null)
+                overlay.Children.Remove(_routingDragPath);
+            _routingDragPath = null;
+
+            scrollViewer.ReleaseMouseCapture();
+
+            if (_routingSourceChannel != null)
+            {
+                // Hit-test relative to the ScrollViewer (captures the channel IN sockets)
+                // and also check the MixerView root for the master IN socket.
+                var dropOnScroll = e.GetPosition(scrollViewer);
+                var inSocket = HitTestForSocketTag(scrollViewer, dropOnScroll, "IO_SOCKET");
+
+                // Also check master IN socket (outside ScrollViewer)
+                if (inSocket == null)
+                {
+                    var dropOnView = e.GetPosition(this);
+                    inSocket = HitTestForSocketTag(this, dropOnView, "MASTER_IN_SOCKET");
+                }
+
+                if (inSocket != null)
+                {
+                    if (inSocket.Tag as string == "MASTER_IN_SOCKET")
+                    {
+                        _routingSourceChannel.SendTargets.Clear();
+                        RedrawRoutingCables();
+                        if (ViewModel != null)
+                            ViewModel.StatusMessage = $"🔌 {_routingSourceChannel.Name} → MASTER";
+                    }
+                    else
+                    {
+                        var targetChannel = FindMixerChannelFromElement(inSocket);
+                        if (targetChannel != null && targetChannel != _routingSourceChannel)
+                        {
+                            if (_routingSourceChannel.SendTargets.Contains(targetChannel.ChannelNumber))
+                            {
+                                // Removing an existing send — always allowed
+                                _routingSourceChannel.RemoveSend(targetChannel.ChannelNumber);
+                                RedrawRoutingCables();
+                                if (ViewModel != null)
+                                    ViewModel.StatusMessage = $"🔌 {_routingSourceChannel.Name} ⊗ {targetChannel.Name}";
+                            }
+                            else
+                            {
+                                // Adding a new send — check for cycles first
+                                if (ViewModel != null && ViewModel.WouldCreateCycle(_routingSourceChannel, targetChannel))
+                                {
+                                    ViewModel.StatusMessage = $"✗ Loop verhindert: {targetChannel.Name} → … → {_routingSourceChannel.Name} existiert bereits";
+                                }
+                                else
+                                {
+                                    _routingSourceChannel.AddSend(targetChannel.ChannelNumber);
+                                    RedrawRoutingCables();
+                                    if (ViewModel != null)
+                                        ViewModel.StatusMessage = $"🔌 {_routingSourceChannel.Name} → {targetChannel.Name}";
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            _isRoutingDrag = false;
+            _routingSourceChannel = null;
+        }
+
+        /// <summary>
+        /// Redraws all routing cables on the RoutingOverlay canvas (inside the ScrollViewer).
+        /// Cables are naturally clipped to the visible mixer area.
+        /// </summary>
+        private void RedrawRoutingCables()
+        {
+            var overlay = FindName("RoutingOverlay") as Canvas;
+            if (overlay == null || ViewModel == null) return;
+
+            var toRemove = overlay.Children.OfType<System.Windows.Shapes.Path>()
+                .Where(p => p != _routingDragPath).ToList();
+            foreach (var p in toRemove)
+                overlay.Children.Remove(p);
+
+            var channelList = ViewModel.MixerChannels.ToList();
+
+            foreach (var sourceChannel in channelList)
+            {
+                foreach (var targetNum in sourceChannel.SendTargets)
+                {
+                    var targetChannel = channelList.FirstOrDefault(c => c.ChannelNumber == targetNum);
+                    if (targetChannel == null) continue;
+
+                    var outSocket = FindSocketInScrollViewer(sourceChannel, "IO_SOCKET");
+                    var inSocket  = FindSocketInScrollViewer(targetChannel,  "IO_SOCKET");
+                    if (outSocket == null || inSocket == null) continue;
+
+                    try
+                    {
+                        var start = outSocket.TranslatePoint(
+                            new Point(outSocket.ActualWidth / 2, outSocket.ActualHeight / 2), overlay);
+                        var end = inSocket.TranslatePoint(
+                            new Point(inSocket.ActualWidth / 2, inSocket.ActualHeight / 2), overlay);
+
+                        var cable = CreateRoutingPath(start, end, sourceChannel.Color, false);
+                        cable.ToolTip = $"{sourceChannel.Name} → {targetChannel.Name}\nKlick zum Trennen";
+
+                        var src = sourceChannel;
+                        var tgt = targetChannel;
+                        cable.MouseLeftButtonDown += (s, ev) =>
+                        {
+                            src.RemoveSend(tgt.ChannelNumber);
+                            RedrawRoutingCables();
+                            if (ViewModel != null)
+                                ViewModel.StatusMessage = $"🔌 {src.Name} ✗ {tgt.Name}";
+                            ev.Handled = true;
+                        };
+
+                        overlay.Children.Add(cable);
+                    }
+                    catch { /* element not yet in visual tree */ }
+                }
+            }
+        }
+
+        private FrameworkElement? FindSocketInScrollViewer(Models.Mixer.MixerChannel channel, string socketTag)
+        {
+            var scrollViewer = FindName("MixerScrollViewer") as DependencyObject;
+            if (scrollViewer == null) return null;
+            return FindSocketRecursive(scrollViewer, channel, socketTag);
+        }
+
+        private FrameworkElement? FindSocketRecursive(DependencyObject parent, Models.Mixer.MixerChannel channel, string socketTag)
+        {
+            int count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent);
+            for (int i = 0; i < count; i++)
+            {
+                var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
+
+                if (child is MixerChannelControl channelControl &&
+                    channelControl.DataContext is Track track &&
+                    ViewModel?.MixerChannels.FirstOrDefault(mc => mc.SourceTrack == track) == channel)
+                {
+                    return FindTaggedElement(channelControl, socketTag);
+                }
+
+                var result = FindSocketRecursive(child, channel, socketTag);
+                if (result != null) return result;
+            }
+            return null;
+        }
+
+        private static FrameworkElement? FindTaggedElement(DependencyObject parent, string tag)
+        {
+            int count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent);
+            for (int i = 0; i < count; i++)
+            {
+                var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
+                if (child is FrameworkElement fe && fe.Tag as string == tag) return fe;
+                var result = FindTaggedElement(child, tag);
+                if (result != null) return result;
+            }
+            return null;
+        }
+
+        private Models.Mixer.MixerChannel? FindMixerChannelFromElement(FrameworkElement element)
+        {
+            DependencyObject? current = element;
+            while (current != null)
+            {
+                if (current is MixerChannelControl ctrl && ctrl.DataContext is Track t && ViewModel != null)
+                    return ViewModel.MixerChannels.FirstOrDefault(mc => mc.SourceTrack == t);
+                current = System.Windows.Media.VisualTreeHelper.GetParent(current);
+            }
+            return null;
+        }
+
+        private static FrameworkElement? HitTestForSocketTag(UIElement root, Point position, string tag)
+        {
+            FrameworkElement? found = null;
+            System.Windows.Media.VisualTreeHelper.HitTest(
+                root, null,
+                result =>
+                {
+                    var current = result.VisualHit as DependencyObject;
+                    while (current != null)
+                    {
+                        if (current is FrameworkElement fe && fe.Tag as string == tag)
+                        {
+                            found = fe;
+                            return System.Windows.Media.HitTestResultBehavior.Stop;
+                        }
+                        current = System.Windows.Media.VisualTreeHelper.GetParent(current);
+                    }
+                    return System.Windows.Media.HitTestResultBehavior.Continue;
+                },
+                new System.Windows.Media.PointHitTestParameters(position));
+            return found;
+        }
+
+        /// <summary>Walks up the visual tree from <paramref name="element"/> (inclusive) to find
+        /// the first <see cref="FrameworkElement"/> whose <c>Tag</c> equals <paramref name="tag"/>.</summary>
+        private static FrameworkElement? FindTaggedAncestorOrSelf(DependencyObject? element, string tag)
+        {
+            var current = element;
+            while (current != null)
+            {
+                if (current is FrameworkElement fe && fe.Tag as string == tag)
+                    return fe;
+                current = System.Windows.Media.VisualTreeHelper.GetParent(current);
+            }
+            return null;
+        }
+
+        private static System.Windows.Shapes.Path CreateRoutingPath(
+            Point start, Point end,
+            System.Windows.Media.Color color,
+            bool isDragging)
+        {
+            var geometry = new System.Windows.Media.PathGeometry();
+            var figure   = new System.Windows.Media.PathFigure { StartPoint = start };
+            double offset = Math.Max(40, Math.Abs(end.Y - start.Y) * 0.6);
+            figure.Segments.Add(new System.Windows.Media.BezierSegment(
+                new Point(start.X, start.Y + offset),
+                new Point(end.X,   end.Y   - offset),
+                end, true));
+            geometry.Figures.Add(figure);
+
+            var brushColor = isDragging
+                ? System.Windows.Media.Color.FromArgb(160, color.R, color.G, color.B)
+                : color;
+
+            var path = new System.Windows.Shapes.Path
+            {
+                Data            = geometry,
+                Stroke          = new System.Windows.Media.SolidColorBrush(brushColor),
+                StrokeThickness = isDragging ? 2 : 3,
+                StrokeStartLineCap = System.Windows.Media.PenLineCap.Round,
+                StrokeEndLineCap   = System.Windows.Media.PenLineCap.Round,
+                IsHitTestVisible   = !isDragging,
+                Cursor = isDragging ? Cursors.Arrow : Cursors.Hand
+            };
+
+            if (!isDragging)
+            {
+                path.Effect = new System.Windows.Media.Effects.DropShadowEffect
+                {
+                    Color       = color,
+                    BlurRadius  = 8,
+                    ShadowDepth = 0,
+                    Opacity     = 0.65
+                };
+            }
+
+            return path;
+        }
+
+        private static void UpdateRoutingPath(System.Windows.Shapes.Path path, Point start, Point end)
+        {
+            var geometry = new System.Windows.Media.PathGeometry();
+            var figure   = new System.Windows.Media.PathFigure { StartPoint = start };
+            double offset = Math.Max(40, Math.Abs(end.Y - start.Y) * 0.6);
+            figure.Segments.Add(new System.Windows.Media.BezierSegment(
+                new Point(start.X, start.Y + offset),
+                new Point(end.X,   end.Y   - offset),
+                end, true));
+            geometry.Figures.Add(figure);
+            path.Data = geometry;
+        }
     }
 }

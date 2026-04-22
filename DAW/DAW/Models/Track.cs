@@ -45,6 +45,7 @@ public class Track : INotifyPropertyChanged, IDisposable
     private VolumePanSampleProvider? _volumePan;
     private EffectSampleProvider? _effectProvider;
     private DAW.Audio.MeteringSampleProvider? _metering;
+    private DAW.Audio.MeteringSampleProvider? _busMeter;
     private bool _isLoaded;
     private int _trackNumber;
     
@@ -433,6 +434,26 @@ public class Track : INotifyPropertyChanged, IDisposable
         _volumePan.Volume = effectiveVolume;
         _volumePan.Pan = (float)Pan;
     }
+
+    /// <summary>
+    /// Directly sets the internal volume provider's gain, bypassing <see cref="Volume"/>.
+    /// Used by the routing graph so the bus fader — not the per-track Volume — controls level.
+    /// </summary>
+    public void SetVolumeForRouting(float gain)
+    {
+        if (_volumePan is not null)
+            _volumePan.Volume = gain;
+    }
+
+    /// <summary>
+    /// Attaches an external <see cref="MeteringSampleProvider"/> that measures the
+    /// combined bus signal (own audio + all incoming sends).  When set, the UI meter
+    /// reflects the bus level instead of the track-only level.  Pass <c>null</c> to revert.
+    /// </summary>
+    public void SetBusMeter(DAW.Audio.MeteringSampleProvider? busMeter)
+    {
+        _busMeter = busMeter;
+    }
     
     /// <summary>
     /// Ensures the audio pipeline is initialized without starting playback.
@@ -531,7 +552,7 @@ public class Track : INotifyPropertyChanged, IDisposable
         if (_meterTimer is not null) return;
         _meterTimer = new DispatcherTimer(DispatcherPriority.Render)
         {
-            Interval = TimeSpan.FromMilliseconds(33) // ~30 fps
+            Interval = TimeSpan.FromMilliseconds(50) // ~20 fps
         };
         _meterTimer.Tick += MeterTimer_Tick;
         _meterTimer.Start();
@@ -548,7 +569,11 @@ public class Track : INotifyPropertyChanged, IDisposable
 
     private void MeterTimer_Tick(object? sender, EventArgs e)
     {
-        if (_metering is null)
+        // When this track is a routing target, _busMeter captures the combined bus level
+        // (own audio + all incoming sends) — use that for the UI meter.
+        var activeMeter = (DAW.Audio.MeteringSampleProvider?)_busMeter ?? _metering;
+
+        if (activeMeter is null)
         {
             MeterLeft = 0;
             MeterRight = 0;
@@ -556,9 +581,9 @@ public class Track : INotifyPropertyChanged, IDisposable
         }
 
         // Read peaks and reset for next window
-        double peakL = _metering.PeakLeft;
-        double peakR = _metering.PeakRight;
-        _metering.ResetPeaks();
+        double peakL = activeMeter.PeakLeft;
+        double peakR = activeMeter.PeakRight;
+        activeMeter.ResetPeaks();
 
         // Smooth decay: fast attack, slow release
         const double release = 0.7;  // ~30% decay per tick

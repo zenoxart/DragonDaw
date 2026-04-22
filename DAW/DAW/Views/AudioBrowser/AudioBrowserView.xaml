@@ -3,26 +3,19 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:viewModels="clr-namespace:DAW.ViewModels"
              x:Name="Root"
-             Background="#0D1117"
+             Background="{DynamicResource DarkBg}"
              MinWidth="250">
     
     <UserControl.Resources>
-        <SolidColorBrush x:Key="PanelBg" Color="#161B22"/>
-        <SolidColorBrush x:Key="ControlBg" Color="#21262D"/>
-        <SolidColorBrush x:Key="BorderBrush" Color="#30363D"/>
-        <SolidColorBrush x:Key="TextBrush" Color="#C9D1D9"/>
-        <SolidColorBrush x:Key="TextDimBrush" Color="#8B949E"/>
-        <SolidColorBrush x:Key="AccentBrush" Color="#26619C"/>
-        <SolidColorBrush x:Key="AccentLightBrush" Color="#5BA4E6"/>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         
         <HierarchicalDataTemplate DataType="{x:Type viewModels:AudioBrowserFolderViewModel}" 
                                   ItemsSource="{Binding Children}">
             <StackPanel Orientation="Horizontal">
-                <TextBlock Text="📁" Margin="0,0,4,0" Foreground="#5BA4E6"/>
-                <TextBlock Text="{Binding Name}" Foreground="{StaticResource TextBrush}"/>
+                <TextBlock Text="📁" Margin="0,0,4,0" Foreground="{DynamicResource LapisAccentBrush}"/>
+                <TextBlock Text="{Binding Name}" Foreground="{DynamicResource TextPrimary}"/>
                 <TextBlock Text=" (Loading...)" 
-                           Foreground="{StaticResource TextDimBrush}"
+                           Foreground="{DynamicResource TextSecondary}"
                            FontSize="10"
                            Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}"
                            Margin="5,0,0,0"/>
@@ -32,43 +25,43 @@
         <DataTemplate DataType="{x:Type viewModels:AudioBrowserFileViewModel}">
             <StackPanel Orientation="Horizontal">
                 <TextBlock Text="{Binding FileIcon}" Margin="0,0,4,0"/>
-                <TextBlock Text="{Binding Name}" Foreground="{StaticResource TextBrush}"/>
-                <TextBlock Text="{Binding Extension}" Foreground="{StaticResource TextDimBrush}" 
+                <TextBlock Text="{Binding Name}" Foreground="{DynamicResource TextPrimary}"/>
+                <TextBlock Text="{Binding Extension}" Foreground="{DynamicResource TextSecondary}" 
                           FontSize="10" VerticalAlignment="Center" Margin="5,0,0,0"/>
             </StackPanel>
         </DataTemplate>
         
         <Style TargetType="TreeViewItem">
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
             <Setter Property="Padding" Value="4,2"/>
             <Setter Property="Margin" Value="1"/>
             <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
             <Style.Triggers>
                 <Trigger Property="IsSelected" Value="True">
-                    <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                    <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
                     <Setter Property="Foreground" Value="White"/>
                 </Trigger>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="{StaticResource ControlBg}"/>
+                    <Setter Property="Background" Value="{DynamicResource ControlBg}"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
         
         <Style x:Key="NavButton" TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource ControlBg}"/>
-            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource ControlBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="Padding" Value="8,4"/>
             <Setter Property="Margin" Value="2"/>
             <Setter Property="FontSize" Value="11"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                    <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
                 </Trigger>
                 <Trigger Property="IsEnabled" Value="False">
-                    <Setter Property="Foreground" Value="{StaticResource TextDimBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
@@ -84,17 +77,17 @@
         
         <!-- Header -->
         <Border Grid.Row="0" 
-                Background="{StaticResource PanelBg}" 
-                BorderBrush="{StaticResource BorderBrush}" 
+                Background="{DynamicResource PanelBg}" 
+                BorderBrush="{DynamicResource BorderBrush}" 
                 BorderThickness="0,0,0,1" 
                 Padding="8,6">
             <StackPanel>
                 <TextBlock Text="◆ AUDIO BROWSER" 
-                           Foreground="{StaticResource AccentLightBrush}" 
+                           Foreground="{DynamicResource AccentLightBrush}" 
                            FontWeight="Bold"
                            FontSize="12"/>
                 <TextBlock Text="{Binding CurrentPath}" 
-                           Foreground="{StaticResource TextDimBrush}"
+                           Foreground="{DynamicResource TextSecondary}"
                            FontSize="10"
                            Margin="0,2,0,0"
                            TextTrimming="CharacterEllipsis"/>
@@ -103,8 +96,8 @@
         
         <!-- Navigation Controls -->
         <Border Grid.Row="1" 
-                Background="{StaticResource ControlBg}"
-                BorderBrush="{StaticResource BorderBrush}"
+                Background="{DynamicResource ControlBg}"
+                BorderBrush="{DynamicResource BorderBrush}"
                 BorderThickness="0,0,0,1"
                 Padding="4">
             <StackPanel Orientation="Horizontal">
@@ -121,8 +114,8 @@
         
         <!-- Search -->
         <Border Grid.Row="2" 
-                Background="{StaticResource ControlBg}"
-                BorderBrush="{StaticResource BorderBrush}"
+                Background="{DynamicResource ControlBg}"
+                BorderBrush="{DynamicResource BorderBrush}"
                 BorderThickness="0,0,0,1"
                 Padding="8,6">
             <Grid>
@@ -132,14 +125,14 @@
                 </Grid.ColumnDefinitions>
                 <TextBox x:Name="SearchBox"
                          Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
-                         Background="{StaticResource PanelBg}"
-                         Foreground="{StaticResource TextBrush}"
-                         BorderBrush="{StaticResource BorderBrush}"
+                         Background="{DynamicResource PanelBg}"
+                         Foreground="{DynamicResource TextPrimary}"
+                         BorderBrush="{DynamicResource BorderBrush}"
                          BorderThickness="1"
                          Padding="6,4"
                          FontSize="11"/>
                 <TextBlock Text="🔍 Search..." 
-                           Foreground="{StaticResource TextDimBrush}"
+                           Foreground="{DynamicResource TextSecondary}"
                            IsHitTestVisible="False"
                            VerticalAlignment="Center"
                            Margin="8,0,0,0">
@@ -169,13 +162,13 @@
             
             <!-- Favorites Section -->
             <Expander Grid.Row="0" Header="⭐ FAVORITES" 
-                      Background="{StaticResource PanelBg}"
-                      Foreground="{StaticResource TextBrush}"
-                      BorderBrush="{StaticResource BorderBrush}"
+                      Background="{DynamicResource PanelBg}"
+                      Foreground="{DynamicResource TextPrimary}"
+                      BorderBrush="{DynamicResource BorderBrush}"
                       IsExpanded="True"
                       Margin="0,0,0,4">
                 <ItemsControl ItemsSource="{Binding FavoritePaths}" 
-                              Background="{StaticResource ControlBg}"
+                              Background="{DynamicResource ControlBg}"
                               Padding="4">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
@@ -187,7 +180,7 @@
                                     <Style TargetType="Border">
                                         <Style.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                                                <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
                                             </Trigger>
                                         </Style.Triggers>
                                     </Style>
@@ -198,14 +191,14 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="{Binding}" 
-                                               Foreground="{StaticResource TextBrush}"
+                                               Foreground="{DynamicResource TextPrimary}"
                                                FontSize="11"
                                                TextTrimming="CharacterEllipsis"/>
                                     <Button Grid.Column="1" Content="❌" 
                                             FontSize="10" 
                                             Background="Transparent"
                                             BorderThickness="0"
-                                            Foreground="{StaticResource TextDimBrush}"
+                                            Foreground="{DynamicResource TextSecondary}"
                                             Padding="2"
                                             Margin="4,0,0,0"
                                             Click="RemoveFavorite_Click"
@@ -221,9 +214,9 @@
             <TreeView x:Name="BrowserTree"
                       Grid.Row="1"
                       ItemsSource="{Binding RootItems}"
-                      Background="{StaticResource PanelBg}"
+                      Background="{DynamicResource PanelBg}"
                       BorderThickness="1"
-                      BorderBrush="{StaticResource BorderBrush}"
+                      BorderBrush="{DynamicResource BorderBrush}"
                       Padding="4"
                       ScrollViewer.HorizontalScrollBarVisibility="Auto"
                       SelectedItemChanged="BrowserTree_SelectedItemChanged"
@@ -240,7 +233,7 @@
                 Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                 <TextBlock Text="🔄" FontSize="24" HorizontalAlignment="Center" 
-                           Foreground="{StaticResource AccentLightBrush}">
+                           Foreground="{DynamicResource AccentLightBrush}">
                     <TextBlock.RenderTransform>
                         <RotateTransform x:Name="LoadingRotation"/>
                     </TextBlock.RenderTransform>
@@ -257,7 +250,7 @@
                     </TextBlock.Triggers>
                 </TextBlock>
                 <TextBlock Text="Loading..." 
-                           Foreground="{StaticResource TextBrush}" 
+                           Foreground="{DynamicResource TextPrimary}" 
                            FontSize="12" 
                            Margin="0,8,0,0"
                            HorizontalAlignment="Center"/>

@@ -255,7 +255,7 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <ComboBox x:Name="EffectTypeCombo" Background="#2D2D2D" Foreground="White" BorderThickness="0" Padding="8,6" FontSize="10">
+                <ComboBox x:Name="EffectTypeCombo" Padding="8,6" FontSize="10">
                     <ComboBoxItem Content="EQ" Tag="Equalizer" IsSelected="True"/>
                     <ComboBoxItem Content="Compressor" Tag="Compressor"/>
                     <ComboBoxItem Content="Reverb" Tag="Reverb"/>

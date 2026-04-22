@@ -1,41 +1,42 @@
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
+using DAW.Audio.Effects;
 
 namespace DAW.Audio;
 
 /// <summary>
 /// Central audio mix engine that renders all tracks through a single output device.
-/// This guarantees sample-accurate synchronization — every track is mixed in the
-/// same audio callback so there is zero start-up delay between tracks.
+/// Signal chain: Track inputs → Mixer → Master EffectChain → Metering → Output.
 /// </summary>
 public sealed class AudioMixEngine : IDisposable
 {
     private readonly WaveOutEvent _waveOut;
     private readonly MixingSampleProvider _mixer;
+    private readonly EffectChain _masterEffectChain;
+    private readonly EffectSampleProvider _masterEffectProvider;
     private readonly MeteringSampleProvider _masterMeter;
     private readonly object _lock = new();
 
-    // Maps the raw track output → the adapted provider actually added to the mixer,
-    // so RemoveInput can find and remove the correct instance.
     private readonly Dictionary<ISampleProvider, ISampleProvider> _inputMap = new();
 
-    /// <summary>
-    /// Creates the engine with a stereo 44.1 kHz mix bus (matches most audio files).
-    /// </summary>
     public AudioMixEngine(int sampleRate = 44100, int channels = 2)
     {
         var format = WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, channels);
         _mixer = new MixingSampleProvider(format)
         {
-            ReadFully = true  // output silence when no inputs are connected
+            ReadFully = true
         };
 
-        // Master metering — captures peak levels of the final mix
-        _masterMeter = new MeteringSampleProvider(_mixer);
+        // Master effect chain — inserted between mixer and metering
+        _masterEffectChain = new EffectChain();
+        _masterEffectProvider = new EffectSampleProvider(_mixer, _masterEffectChain);
+
+        // Master metering — captures peak levels after effects
+        _masterMeter = new MeteringSampleProvider(_masterEffectProvider);
 
         _waveOut = new WaveOutEvent
         {
-            DesiredLatency = 100,   // ms — reasonable default
+            DesiredLatency = 100,
             NumberOfBuffers = 3
         };
         _waveOut.Init(_masterMeter);
@@ -43,6 +44,9 @@ public sealed class AudioMixEngine : IDisposable
 
     /// <summary>Master output metering provider — read peaks from this.</summary>
     public MeteringSampleProvider MasterMeter => _masterMeter;
+
+    /// <summary>Master effect chain — add/remove effects here for master bus processing.</summary>
+    public EffectChain MasterEffectChain => _masterEffectChain;
 
     /// <summary>The shared mix format that all track providers must match.</summary>
     public WaveFormat MixFormat => _mixer.WaveFormat;
@@ -120,6 +124,9 @@ public sealed class AudioMixEngine : IDisposable
 
         return result;
     }
+
+    /// <summary>Adapts an input's format to match the mix bus. Used by external routing builders.</summary>
+    public ISampleProvider AdaptFormat(ISampleProvider input) => EnsureMatchingFormat(input);
 
     /// <summary>Starts the single shared output device — all connected tracks play at once.</summary>
     public void Play()

@@ -14,6 +14,7 @@ public abstract class AudioEffect : INotifyPropertyChanged
     private volatile string _name = "Effect";
     private volatile bool _isEnabled = true;
     private volatile bool _isExpanded = true;
+    private string _currentPresetName = string.Empty;
 
     /// <summary>
     /// Display name of the effect.
@@ -65,6 +66,23 @@ public abstract class AudioEffect : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// Name of the currently loaded preset, or empty string if no preset is active.
+    /// Updated automatically by <see cref="Services.EffectPresetService"/> on load/save.
+    /// </summary>
+    public string CurrentPresetName
+    {
+        get => _currentPresetName;
+        set
+        {
+            if (_currentPresetName != value)
+            {
+                _currentPresetName = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    /// <summary>
     /// Effect type identifier for serialization/UI.
     /// </summary>
     public abstract string EffectType { get; }
@@ -73,6 +91,13 @@ public abstract class AudioEffect : INotifyPropertyChanged
     /// Icon for the effect (emoji or icon character).
     /// </summary>
     public abstract string Icon { get; }
+
+    /// <summary>
+    /// Algorithmic latency introduced by this effect, in samples.
+    /// Most effects are sample-accurate (0). Override for look-ahead or block-based
+    /// effects so the routing engine can insert compensating delays on parallel paths.
+    /// </summary>
+    public virtual int LatencySamples => 0;
 
     /// <summary>
     /// Processes a sample buffer through this effect.

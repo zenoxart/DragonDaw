@@ -4,6 +4,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using DAW.Audio.Effects;
 using DAW.Models;
+using DAW.Services;
 using DAW.Views.Controls;
 
 namespace DAW.Plugins;
@@ -17,11 +18,49 @@ public class PluginWindow : Window
     public PluginDefinition Definition { get; }
     public Track? TargetTrack { get; private set; }
 
+    private ComboBox? _presetCombo;
+
+    // ── Singleton-per-effect registry ────────────────────────────────────────
+    // Maps each AudioEffect instance to its open PluginWindow (if any).
+    // Ensures only one window per effect instance can be open at a time.
+    private static readonly Dictionary<AudioEffect, PluginWindow> _openWindows = new();
+
+    /// <summary>
+    /// Opens (or focuses) the editor window for <paramref name="effect"/>.
+    /// If a window for this exact effect instance is already open it is
+    /// brought to the foreground instead of creating a second one.
+    /// </summary>
+    public static void Show(AudioEffect effect, PluginDefinition definition,
+                            Track? targetTrack, Window? owner = null)
+    {
+        // Already open → just focus it
+        if (_openWindows.TryGetValue(effect, out var existing))
+        {
+            if (existing.WindowState == WindowState.Minimized)
+                existing.WindowState = WindowState.Normal;
+            existing.Activate();
+            existing.Focus();
+            return;
+        }
+
+        var win = new PluginWindow(effect, definition, targetTrack)
+        {
+            Owner = owner,
+            WindowStartupLocation = owner != null
+                ? WindowStartupLocation.CenterOwner
+                : WindowStartupLocation.CenterScreen
+        };
+        win.Show();
+    }
+
     public PluginWindow(AudioEffect effect, PluginDefinition definition, Track? targetTrack)
     {
         Effect = effect;
         Definition = definition;
         TargetTrack = targetTrack;
+
+        // Register this window in the open-windows map
+        _openWindows[effect] = this;
 
         InitializeWindow();
         BuildUI();
@@ -30,10 +69,10 @@ public class PluginWindow : Window
     private void InitializeWindow()
     {
         Title = $"{Definition.Icon} {Definition.Name}";
-        Width = Effect is EqualizerEffect ? 580 : 320;
-        Height = Effect is EqualizerEffect ? 380 : 400;
-        MinWidth = Effect is EqualizerEffect ? 380 : 280;
-        MinHeight = Effect is EqualizerEffect ? 280 : 200;
+        Width     = Effect is EqualizerEffect ? 580 : Effect is CompressorEffect ? 480 : Effect is SaturationEffect ? 420 : 320;
+        Height    = Effect is EqualizerEffect ? 380 : Effect is CompressorEffect ? 440 : Effect is SaturationEffect ? 480 : 400;
+        MinWidth  = Effect is EqualizerEffect ? 380 : Effect is CompressorEffect ? 380 : Effect is SaturationEffect ? 340 : 280;
+        MinHeight = Effect is EqualizerEffect ? 280 : Effect is CompressorEffect ? 360 : Effect is SaturationEffect ? 400 : 200;
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
         Background = Brushes.Transparent;
@@ -47,42 +86,261 @@ public class PluginWindow : Window
     {
         var mainBorder = new Border
         {
-            Background = new SolidColorBrush(Color.FromRgb(0x16, 0x1B, 0x22)),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(0x26, 0x61, 0x9C)),
+            Background = new SolidColorBrush(PluginTheme.WindowBg),
+            BorderBrush = new SolidColorBrush(PluginTheme.WindowBorder),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(8),
             Effect = new System.Windows.Media.Effects.DropShadowEffect
             {
                 BlurRadius = 20,
                 ShadowDepth = 5,
-                Opacity = 0.5,
-                Color = Colors.Black
+                Opacity = PluginTheme.ShadowOpacity,
+                Color = PluginTheme.ShadowColor
             }
         };
 
         var mainGrid = new Grid();
-        mainGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        mainGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Title
+        mainGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Preset bar
+        mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // Content
 
         // Title Bar
         var titleBar = CreateTitleBar();
         Grid.SetRow(titleBar, 0);
         mainGrid.Children.Add(titleBar);
 
+        // Preset Bar
+        var presetBar = CreatePresetBar();
+        Grid.SetRow(presetBar, 1);
+        mainGrid.Children.Add(presetBar);
+
         // Content
         var content = CreateContent();
-        Grid.SetRow(content, 1);
+        Grid.SetRow(content, 2);
         mainGrid.Children.Add(content);
 
         mainBorder.Child = mainGrid;
         Content = mainBorder;
     }
 
+    private Border CreatePresetBar()
+    {
+        var bar = new Border
+        {
+            Background = new SolidColorBrush(PluginTheme.PresetBarBg),
+            BorderBrush = new SolidColorBrush(PluginTheme.PresetBarBorder),
+            BorderThickness = new Thickness(0, 0, 0, 1),
+            Padding = new Thickness(10, 5, 10, 5)
+        };
+
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });   // Label
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // ComboBox
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });   // Save
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });   // Delete
+
+        // Label
+        var label = new TextBlock
+        {
+            Text = "PRESET",
+            Foreground = new SolidColorBrush(PluginTheme.PresetLabel),
+            FontSize = 9,
+            FontWeight = FontWeights.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 8, 0)
+        };
+        Grid.SetColumn(label, 0);
+        grid.Children.Add(label);
+
+        // Preset combo
+        _presetCombo = new ComboBox
+        {
+            FontSize = 10,
+            MinWidth = 100,
+            IsEditable = true,
+            VerticalAlignment = VerticalAlignment.Center,
+            Background = new SolidColorBrush(PluginTheme.ComboBg),
+            Foreground = new SolidColorBrush(PluginTheme.ComboFg),
+            BorderBrush = new SolidColorBrush(PluginTheme.ComboBorder),
+            BorderThickness = new Thickness(1)
+        };
+        RefreshPresetList();
+        _presetCombo.SelectionChanged += OnPresetSelected;
+        Grid.SetColumn(_presetCombo, 1);
+        grid.Children.Add(_presetCombo);
+
+        // Save button
+        var saveBtn = CreatePresetButton("💾", "Preset speichern", OnSavePreset);
+        Grid.SetColumn(saveBtn, 2);
+        grid.Children.Add(saveBtn);
+
+        // Delete button
+        var deleteBtn = CreatePresetButton("🗑", "Preset löschen", OnDeletePreset);
+        Grid.SetColumn(deleteBtn, 3);
+        grid.Children.Add(deleteBtn);
+
+        bar.Child = grid;
+        return bar;
+    }
+
+    private static Button CreatePresetButton(string content, string tooltip, RoutedEventHandler handler)
+    {
+        var btn = new Button
+        {
+            Content = content,
+            ToolTip = tooltip,
+            Width = 26,
+            Height = 22,
+            FontSize = 11,
+            Margin = new Thickness(4, 0, 0, 0),
+            Background = new SolidColorBrush(PluginTheme.BtnBg),
+            Foreground = new SolidColorBrush(PluginTheme.BtnFg),
+            BorderBrush = new SolidColorBrush(PluginTheme.BtnBorder),
+            BorderThickness = new Thickness(1),
+            Cursor = Cursors.Hand
+        };
+        btn.Click += handler;
+        return btn;
+    }
+
+    private void RefreshPresetList()
+    {
+        if (_presetCombo == null) return;
+        _presetCombo.SelectionChanged -= OnPresetSelected;
+        _presetCombo.Items.Clear();
+
+        foreach (var name in EffectPresetService.ListPresets(Effect.EffectType))
+            _presetCombo.Items.Add(name);
+
+        // Show whichever preset is currently loaded on the effect
+        var active = Effect.CurrentPresetName;
+        if (!string.IsNullOrEmpty(active) && _presetCombo.Items.Contains(active))
+            _presetCombo.SelectedItem = active;
+        else
+            _presetCombo.Text = active; // preserves typed-but-unsaved name
+
+        _presetCombo.SelectionChanged += OnPresetSelected;
+    }
+
+    private void OnPresetSelected(object sender, SelectionChangedEventArgs e)
+    {
+        if (_presetCombo?.SelectedItem is string presetName && !string.IsNullOrEmpty(presetName))
+        {
+            EffectPresetService.LoadPreset(Effect, presetName);
+        }
+    }
+
+    private void OnSavePreset(object sender, RoutedEventArgs e)
+    {
+        var name = _presetCombo?.Text?.Trim();
+        if (string.IsNullOrEmpty(name))
+        {
+            // Prompt with a simple input dialog
+            name = PromptPresetName();
+            if (string.IsNullOrEmpty(name)) return;
+        }
+
+        EffectPresetService.SavePreset(Effect, name);
+        RefreshPresetList();
+        _presetCombo!.Text = name;
+    }
+
+    private void OnDeletePreset(object sender, RoutedEventArgs e)
+    {
+        var name = _presetCombo?.Text?.Trim();
+        if (string.IsNullOrEmpty(name)) return;
+
+        var result = MessageBox.Show(
+            $"Preset \"{name}\" löschen?",
+            "Preset löschen",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+
+        if (result == MessageBoxResult.Yes)
+        {
+            EffectPresetService.DeletePreset(Effect.EffectType, name);
+            Effect.CurrentPresetName = string.Empty;
+            RefreshPresetList();
+        }
+    }
+
+    private string? PromptPresetName()
+    {
+        var dialog = new Window
+        {
+            Title = "Preset speichern",
+            Width = 300,
+            Height = 140,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Owner = this,
+            WindowStyle = WindowStyle.ToolWindow,
+            ResizeMode = ResizeMode.NoResize,
+            Background = new SolidColorBrush(PluginTheme.DialogBg)
+        };
+
+        var stack = new StackPanel { Margin = new Thickness(16) };
+        stack.Children.Add(new TextBlock
+        {
+            Text = "Preset-Name:",
+            Foreground = new SolidColorBrush(PluginTheme.InputFg),
+            FontSize = 12,
+            Margin = new Thickness(0, 0, 0, 8)
+        });
+
+        var input = new TextBox
+        {
+            FontSize = 12,
+            Padding = new Thickness(6, 4, 6, 4),
+            Background = new SolidColorBrush(PluginTheme.InputBg),
+            Foreground = new SolidColorBrush(PluginTheme.InputFg),
+            BorderBrush = new SolidColorBrush(PluginTheme.InputBorder),
+            Text = Effect.Name
+        };
+        stack.Children.Add(input);
+
+        var btnPanel = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 12, 0, 0)
+        };
+
+        string? result = null;
+        var okBtn = new Button
+        {
+            Content = "Speichern",
+            Width = 80,
+            Padding = new Thickness(0, 4, 0, 4),
+            Margin = new Thickness(0, 0, 8, 0),
+            IsDefault = true
+        };
+        okBtn.Click += (_, _) => { result = input.Text?.Trim(); dialog.Close(); };
+
+        var cancelBtn = new Button
+        {
+            Content = "Abbrechen",
+            Width = 80,
+            Padding = new Thickness(0, 4, 0, 4),
+            IsCancel = true
+        };
+
+        btnPanel.Children.Add(okBtn);
+        btnPanel.Children.Add(cancelBtn);
+        stack.Children.Add(btnPanel);
+        dialog.Content = stack;
+
+        input.Focus();
+        input.SelectAll();
+        dialog.ShowDialog();
+
+        return string.IsNullOrWhiteSpace(result) ? null : result;
+    }
+
     private Border CreateTitleBar()
     {
         var titleBar = new Border
         {
-            Background = new SolidColorBrush(Color.FromRgb(0x1A, 0x45, 0x70)),
+            Background = new SolidColorBrush(PluginTheme.TitleBarBg),
             CornerRadius = new CornerRadius(8, 8, 0, 0),
             Padding = new Thickness(12, 8, 8, 8)
         };
@@ -121,7 +379,7 @@ public class PluginWindow : Window
             Text = Definition.Name,
             FontWeight = FontWeights.SemiBold,
             FontSize = 13,
-            Foreground = Brushes.White,
+            Foreground = new SolidColorBrush(PluginTheme.TitleText),
             VerticalAlignment = VerticalAlignment.Center
         });
         
@@ -132,7 +390,7 @@ public class PluginWindow : Window
             {
                 Text = $" → {TargetTrack.Title}",
                 FontSize = 10,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x5B, 0xA4, 0xE6)),
+                Foreground = new SolidColorBrush(PluginTheme.TitleAccent),
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(8, 0, 0, 0)
             });
@@ -168,7 +426,7 @@ public class PluginWindow : Window
             FontSize = 10,
             Margin = new Thickness(2, 0, 0, 0),
             Background = Brushes.Transparent,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xAA, 0xAA, 0xAA)),
+            Foreground = new SolidColorBrush(PluginTheme.BtnFg),
             BorderThickness = new Thickness(0),
             Cursor = Cursors.Hand
         };
@@ -177,14 +435,14 @@ public class PluginWindow : Window
         {
             btn.Background = isClose 
                 ? new SolidColorBrush(Color.FromRgb(0xE8, 0x11, 0x23))
-                : new SolidColorBrush(Color.FromRgb(0x30, 0x36, 0x3D));
+                : new SolidColorBrush(PluginTheme.BtnHover);
             btn.Foreground = Brushes.White;
         };
 
         btn.MouseLeave += (s, e) =>
         {
             btn.Background = Brushes.Transparent;
-            btn.Foreground = new SolidColorBrush(Color.FromRgb(0xAA, 0xAA, 0xAA));
+            btn.Foreground = new SolidColorBrush(PluginTheme.BtnFg);
         };
 
         btn.Click += (s, e) => action();
@@ -204,7 +462,7 @@ public class PluginWindow : Window
         // Enable/Bypass toggle
         var enablePanel = new Border
         {
-            Background = new SolidColorBrush(Color.FromRgb(0x21, 0x26, 0x2D)),
+            Background = new SolidColorBrush(PluginTheme.ControlBg),
             CornerRadius = new CornerRadius(4),
             Padding = new Thickness(12, 8, 12, 8),
             Margin = new Thickness(0, 0, 0, 12)
@@ -217,7 +475,7 @@ public class PluginWindow : Window
         var enableLabel = new TextBlock
         {
             Text = "Effect Enabled",
-            Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC)),
+            Foreground = new SolidColorBrush(PluginTheme.TextPrimary),
             VerticalAlignment = VerticalAlignment.Center
         };
 
@@ -252,18 +510,15 @@ public class PluginWindow : Window
                 break;
 
             case CompressorEffect comp:
-                AddSlider(container, "Threshold", -60, 0, comp.Threshold, v => comp.Threshold = v, "dB");
-                AddSlider(container, "Ratio", 1, 20, comp.Ratio, v => comp.Ratio = v, ":1");
-                AddSlider(container, "Attack", 0.1, 100, comp.Attack, v => comp.Attack = v, "ms");
-                AddSlider(container, "Release", 10, 1000, comp.Release, v => comp.Release = v, "ms");
-                AddSlider(container, "Makeup", 0, 24, comp.MakeupGain, v => comp.MakeupGain = v, "dB");
+                Add1176CompressorUI(container, comp);
                 break;
 
             case ReverbEffect reverb:
-                AddSlider(container, "Room Size", 0, 1, reverb.RoomSize, v => reverb.RoomSize = v, "%", 100);
-                AddSlider(container, "Damping", 0, 1, reverb.Damping, v => reverb.Damping = v, "%", 100);
-                AddSlider(container, "Wet", 0, 1, reverb.WetLevel, v => reverb.WetLevel = v, "%", 100);
-                AddSlider(container, "Dry", 0, 1, reverb.DryLevel, v => reverb.DryLevel = v, "%", 100);
+                AddReverbUI(container, reverb);
+                break;
+
+            case SaturationEffect sat:
+                AddSaturationUI(container, sat);
                 break;
 
             case DelayEffect delay:
@@ -298,7 +553,7 @@ public class PluginWindow : Window
         var border = new Border
         {
             CornerRadius = new CornerRadius(6),
-            Background = new SolidColorBrush(Color.FromRgb(0x0A, 0x0E, 0x14)),
+            Background = new SolidColorBrush(PluginTheme.SurfaceBg),
             ClipToBounds = true,
             Child = eqControl
         };
@@ -308,10 +563,107 @@ public class PluginWindow : Window
         container.Children.Add(new TextBlock
         {
             Text = "↔ Drag = Freq/Gain   ⟳ Scroll = Q   Right-click = Mode / Options",
-            Foreground = new SolidColorBrush(Color.FromArgb(100, 0x88, 0x99, 0xAA)),
+            Foreground = new SolidColorBrush(PluginTheme.TextHint),
             FontSize = 9,
             HorizontalAlignment = HorizontalAlignment.Center,
             Margin = new Thickness(0, 0, 0, 4)
+        });
+    }
+
+    /// <summary>
+    /// Builds the 1176-style compressor UI with VU meter and knobs.
+    /// </summary>
+    private void Add1176CompressorUI(StackPanel container, CompressorEffect comp)
+    {
+        var compControl = new CompressorControl
+        {
+            Effect = comp,
+            MinHeight = 260,
+            Margin = new Thickness(0, 0, 0, 4),
+            Cursor = Cursors.Hand,
+            ToolTip = "Drag knobs up/down · Click ratio buttons · Right-click to reset"
+        };
+        var border = new Border
+        {
+            CornerRadius = new CornerRadius(6),
+            Background = new SolidColorBrush(PluginTheme.SurfaceBg),
+            ClipToBounds = true,
+            Child = compControl
+        };
+        container.Children.Add(border);
+
+        container.Children.Add(new TextBlock
+        {
+            Text = "↕ Drag knobs · Click ratio · Right-click = Reset",
+            Foreground = new SolidColorBrush(PluginTheme.TextHint),
+            FontSize = 9,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 0, 0, 4)
+        });
+    }
+
+    /// <summary>
+    /// Builds the Valhalla Room–inspired reverb UI with rotary knobs.
+    /// </summary>
+    private void AddReverbUI(StackPanel container, ReverbEffect reverb)
+    {
+        var reverbControl = new ReverbControl
+        {
+            Effect = reverb,
+            MinHeight = 420,
+            Margin = new Thickness(0, 0, 0, 4),
+            Cursor = Cursors.Hand,
+            ToolTip = "↕ Drag knobs · Shift = fine · Double-click / Right-click = reset · Click mode to cycle"
+        };
+        var border = new Border
+        {
+            CornerRadius = new CornerRadius(8),
+            Background = new SolidColorBrush(PluginTheme.IsLight ? PluginTheme.SurfaceBg : Color.FromRgb(0x08, 0x0A, 0x12)),
+            ClipToBounds = true,
+            Child = reverbControl
+        };
+        container.Children.Add(border);
+
+        container.Children.Add(new TextBlock
+        {
+            Text = "↕ Drag = adjust · Shift+Drag = fine · Dbl-click = reset · Click mode to cycle",
+            Foreground = new SolidColorBrush(PluginTheme.TextHint),
+            FontSize = 9,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 0, 0, 4)
+        });
+    }
+
+    /// <summary>
+    /// Builds the Black Box HG-2–inspired saturation UI.
+    /// </summary>
+    private void AddSaturationUI(StackPanel container, SaturationEffect sat)
+    {
+        var satControl = new Views.Controls.SaturationControl
+        {
+            Effect    = sat,
+            MinHeight = 360,
+            MinWidth = 700,
+            Margin    = new Thickness(0, 0, 0, 4),
+            Cursor    = Cursors.Hand,
+            ToolTip   = "↕ Drag knobs · Right-click = reset · Click buttons to toggle"
+        };
+        var border = new Border
+        {
+            CornerRadius = new CornerRadius(6),
+            Background   = new SolidColorBrush(PluginTheme.SurfaceBg),
+            ClipToBounds = true,
+            Child        = satControl
+        };
+        container.Children.Add(border);
+
+        container.Children.Add(new TextBlock
+        {
+            Text                = "↕ Drag = adjust · Shift = fine · Right-click = reset · Click buttons to toggle",
+            Foreground          = new SolidColorBrush(PluginTheme.TextHint),
+            FontSize            = 9,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin              = new Thickness(0, 0, 0, 4)
         });
     }
 
@@ -424,9 +776,9 @@ public class PluginWindow : Window
                 SelectedItem = band.Mode,
                 Width = 36, FontSize = 7, Margin = new Thickness(0, 4, 0, 0),
                 Padding = new Thickness(1, 0, 1, 0),
-                Background = new SolidColorBrush(Color.FromRgb(0x21, 0x26, 0x2D)),
-                Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC)),
-                BorderBrush = new SolidColorBrush(Color.FromRgb(0x30, 0x36, 0x3D))
+                Background = new SolidColorBrush(PluginTheme.ControlBg),
+                Foreground = new SolidColorBrush(PluginTheme.TextPrimary),
+                BorderBrush = new SolidColorBrush(PluginTheme.Border)
             };
             modeCombo.SelectionChanged += (s, e) =>
             {
@@ -442,48 +794,6 @@ public class PluginWindow : Window
         container.Children.Add(strip);
     }
 
-    private static ControlTemplate? _cachedVerticalFaderTemplate;
-
-    private static ControlTemplate CreateVerticalFaderTemplate()
-    {
-        if (_cachedVerticalFaderTemplate != null) return _cachedVerticalFaderTemplate;
-
-        const string xaml = """
-            <ControlTemplate TargetType="Slider"
-                             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-                <Grid>
-                    <Border Width="3" Background="#0D1117" CornerRadius="1.5" HorizontalAlignment="Center"/>
-                    <Rectangle Width="8" Height="1" Fill="#334455" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                    <Track x:Name="PART_Track">
-                        <Track.Thumb>
-                            <Thumb Width="18" Height="10">
-                                <Thumb.Template>
-                                    <ControlTemplate>
-                                        <Border Background="#3A3A3A" CornerRadius="2"
-                                                BorderBrush="#555" BorderThickness="1">
-                                            <Border CornerRadius="1" Margin="2,1">
-                                                <Border.Background>
-                                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                                                        <GradientStop Color="#4A4A4A" Offset="0"/>
-                                                        <GradientStop Color="#353535" Offset="1"/>
-                                                    </LinearGradientBrush>
-                                                </Border.Background>
-                                            </Border>
-                                        </Border>
-                                    </ControlTemplate>
-                                </Thumb.Template>
-                            </Thumb>
-                        </Track.Thumb>
-                    </Track>
-                </Grid>
-            </ControlTemplate>
-            """;
-
-        _cachedVerticalFaderTemplate = (ControlTemplate)System.Windows.Markup.XamlReader.Parse(xaml);
-        return _cachedVerticalFaderTemplate;
-    }
-
     private void AddBandHeader(StackPanel container, EqBand band, string[] modeNames)
     {
         var headerGrid = new Grid { Margin = new Thickness(0, 8, 0, 2) };
@@ -494,7 +804,7 @@ public class PluginWindow : Window
         var bandLabel = new TextBlock
         {
             Text = $"Band {band.Number}",
-            Foreground = new SolidColorBrush(Color.FromRgb(0x5B, 0xA4, 0xE6)),
+            Foreground = new SolidColorBrush(PluginTheme.TextAccent),
             FontSize = 11,
             FontWeight = FontWeights.SemiBold,
             VerticalAlignment = VerticalAlignment.Center
@@ -507,9 +817,9 @@ public class PluginWindow : Window
             Width = 85,
             FontSize = 10,
             VerticalAlignment = VerticalAlignment.Center,
-            Background = new SolidColorBrush(Color.FromRgb(0x21, 0x26, 0x2D)),
-            Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC)),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(0x30, 0x36, 0x3D))
+            Background = new SolidColorBrush(PluginTheme.ControlBg),
+            Foreground = new SolidColorBrush(PluginTheme.TextPrimary),
+            BorderBrush = new SolidColorBrush(PluginTheme.Border)
         };
         modeCombo.SelectionChanged += (s, e) =>
         {
@@ -540,7 +850,7 @@ public class PluginWindow : Window
         container.Children.Add(new Border
         {
             Height = 1,
-            Background = new SolidColorBrush(Color.FromRgb(0x30, 0x36, 0x3D)),
+            Background = new SolidColorBrush(PluginTheme.Separator),
             Margin = new Thickness(0, 0, 0, 4)
         });
     }
@@ -561,7 +871,7 @@ public class PluginWindow : Window
         var labelText = new TextBlock
         {
             Text = label,
-            Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88)),
+            Foreground = new SolidColorBrush(PluginTheme.TextSecondary),
             FontSize = 11,
             VerticalAlignment = VerticalAlignment.Center
         };
@@ -579,7 +889,7 @@ public class PluginWindow : Window
         var valueText = new TextBlock
         {
             Text = $"{value * displayMultiplier:F1} {unit}",
-            Foreground = new SolidColorBrush(Color.FromRgb(0x5B, 0xA4, 0xE6)),
+            Foreground = new SolidColorBrush(PluginTheme.TextAccent),
             FontSize = 10,
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Center
@@ -609,7 +919,7 @@ public class PluginWindow : Window
         {
             Content = label,
             IsChecked = value,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC)),
+            Foreground = new SolidColorBrush(PluginTheme.TextPrimary),
             Margin = new Thickness(0, 4, 0, 8)
         };
 
@@ -620,22 +930,29 @@ public class PluginWindow : Window
     }
 
     private static ControlTemplate? _cachedFaderTemplate;
+    private static string? _cachedFaderTheme;
 
     /// <summary>
     /// Creates a horizontal fader ControlTemplate matching the FLFaderH style.
-    /// Cached so it's only built once.
+    /// Cached per theme.
     /// </summary>
     private static ControlTemplate CreateFaderTemplate()
     {
-        if (_cachedFaderTemplate != null) return _cachedFaderTemplate;
+        var themeId = ThemeService.Instance.CurrentTheme;
+        if (_cachedFaderTemplate != null && _cachedFaderTheme == themeId) return _cachedFaderTemplate;
 
-        // language=XAML
-        const string xaml = """
+        var t = PluginTheme.FaderTrack;
+        var bg = PluginTheme.FaderThumbBg;
+        var bd = PluginTheme.FaderThumbBdr;
+        var gl = PluginTheme.FaderGradLight;
+        var gd = PluginTheme.FaderGradDark;
+
+        string xaml = $"""
             <ControlTemplate TargetType="Slider"
                              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
                 <Grid>
-                    <Border Height="4" Background="#0D1117" CornerRadius="2" VerticalAlignment="Center">
+                    <Border Height="4" Background="{Hex(t)}" CornerRadius="2" VerticalAlignment="Center">
                         <Border.Effect>
                             <DropShadowEffect ShadowDepth="1" BlurRadius="2" Opacity="0.2"/>
                         </Border.Effect>
@@ -645,13 +962,13 @@ public class PluginWindow : Window
                             <Thumb Width="10" Height="18">
                                 <Thumb.Template>
                                     <ControlTemplate>
-                                        <Border Background="#3A3A3A" CornerRadius="2"
-                                                BorderBrush="#555" BorderThickness="1">
+                                        <Border Background="{Hex(bg)}" CornerRadius="2"
+                                                BorderBrush="{Hex(bd)}" BorderThickness="1">
                                             <Border CornerRadius="1" Margin="2,2">
                                                 <Border.Background>
                                                     <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                                        <GradientStop Color="#4A4A4A" Offset="0"/>
-                                                        <GradientStop Color="#353535" Offset="1"/>
+                                                        <GradientStop Color="{Hex(gl)}" Offset="0"/>
+                                                        <GradientStop Color="{Hex(gd)}" Offset="1"/>
                                                     </LinearGradientBrush>
                                                 </Border.Background>
                                             </Border>
@@ -666,11 +983,67 @@ public class PluginWindow : Window
             """;
 
         _cachedFaderTemplate = (ControlTemplate)System.Windows.Markup.XamlReader.Parse(xaml);
+        _cachedFaderTheme = themeId;
         return _cachedFaderTemplate;
     }
 
+    private static ControlTemplate? _cachedVerticalFaderTemplate;
+    private static string? _cachedVerticalFaderTheme;
+
+    private static ControlTemplate CreateVerticalFaderTemplate()
+    {
+        var themeId = ThemeService.Instance.CurrentTheme;
+        if (_cachedVerticalFaderTemplate != null && _cachedVerticalFaderTheme == themeId) return _cachedVerticalFaderTemplate;
+
+        var t = PluginTheme.FaderTrack;
+        var bg = PluginTheme.FaderThumbBg;
+        var bd = PluginTheme.FaderThumbBdr;
+        var gl = PluginTheme.FaderGradLight;
+        var gd = PluginTheme.FaderGradDark;
+
+        string xaml = $"""
+            <ControlTemplate TargetType="Slider"
+                             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                <Grid>
+                    <Border Width="3" Background="{Hex(t)}" CornerRadius="1.5" HorizontalAlignment="Center"/>
+                    <Rectangle Width="8" Height="1" Fill="{Hex(PluginTheme.Border)}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                    <Track x:Name="PART_Track">
+                        <Track.Thumb>
+                            <Thumb Width="18" Height="10">
+                                <Thumb.Template>
+                                    <ControlTemplate>
+                                        <Border Background="{Hex(bg)}" CornerRadius="2"
+                                                BorderBrush="{Hex(bd)}" BorderThickness="1">
+                                            <Border CornerRadius="1" Margin="2,1">
+                                                <Border.Background>
+                                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                        <GradientStop Color="{Hex(gl)}" Offset="0"/>
+                                                        <GradientStop Color="{Hex(gd)}" Offset="1"/>
+                                                    </LinearGradientBrush>
+                                                </Border.Background>
+                                            </Border>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Thumb.Template>
+                            </Thumb>
+                        </Track.Thumb>
+                    </Track>
+                </Grid>
+            </ControlTemplate>
+            """;
+
+        _cachedVerticalFaderTemplate = (ControlTemplate)System.Windows.Markup.XamlReader.Parse(xaml);
+        _cachedVerticalFaderTheme = themeId;
+        return _cachedVerticalFaderTemplate;
+    }
+
+    private static string Hex(Color c) => $"#{c.A:X2}{c.R:X2}{c.G:X2}{c.B:X2}";
+
     protected override void OnClosed(EventArgs e)
     {
+        // Unregister so the same effect can be reopened later
+        _openWindows.Remove(Effect);
         base.OnClosed(e);
     }
 }

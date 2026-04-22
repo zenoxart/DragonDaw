@@ -14,6 +14,7 @@ using DAW.Input;
 using DAW.Audio;
 using DAW.Audio.Effects;
 using Microsoft.Win32;
+using NAudio.Wave;
 
 namespace DAW.ViewModels;
 
@@ -48,15 +49,27 @@ public class MainViewModel : INotifyPropertyChanged
     private int _trackCounter;
     private MasterEffectSlot? _selectedEffectSlot;
 
+    /// <summary>
+    /// Maps each routing-target track to its live bus fader so Volume/Mute/Solo
+    /// changes on Channel B are immediately reflected in the send signal level.
+    /// </summary>
+    private readonly Dictionary<Track, NAudio.Wave.SampleProviders.VolumeSampleProvider> _busFaders = new();
+
+    /// <summary>
+    /// Maps each routing-target track to its live pan provider so Pan changes
+    /// on Channel B are immediately reflected in the bus signal.
+    /// </summary>
+    private readonly Dictionary<Track, DAW.Audio.VolumePanSampleProvider> _busPanners = new();
+
     public MainViewModel()
     {
         // Initialize centralized audio mix engine (single output device for all tracks)
         MixEngine = new AudioMixEngine();
         
-        // Master meter timer (~30 fps)
+        // Master meter timer (~20 fps)
         _masterMeterTimer = new DispatcherTimer(DispatcherPriority.Render)
         {
-            Interval = TimeSpan.FromMilliseconds(33)
+            Interval = TimeSpan.FromMilliseconds(50)
         };
         _masterMeterTimer.Tick += MasterMeterTimer_Tick;
         _masterMeterTimer.Start();
@@ -78,7 +91,33 @@ public class MainViewModel : INotifyPropertyChanged
         // Initialize enhanced project service
         EnhancedProjectService = new EnhancedProjectService(fileSystemService, settingsService);
         
-        // Initialize File Menu
+        // Initialize commands (MUST be before FileMenuViewModel which reads them)
+        PlayAllCommand = new RelayCommand(PlayAll);
+        PauseAllCommand = new RelayCommand(PauseAll, () => IsPlaying);
+        StopAllCommand = new RelayCommand(StopAll);
+        AddTrackCommand = new RelayCommand(AddTrack);
+        RemoveTrackCommand = new RelayCommand(RemoveTrack, () => SelectedTrack is not null);
+        AnalyzeCommand = new RelayCommand(Analyze, () => SelectedTrack is not null);
+        OpenSamplerCommand = new RelayCommand<Track>(t => OpenSampler(t), _ => SelectedTrack is not null);
+        
+        // Master effects commands
+        AddMasterEffectCommand = new RelayCommand<MasterEffectSlot>(AddMasterEffect);
+        RemoveMasterEffectCommand = new RelayCommand<MasterEffectSlot>(RemoveMasterEffect, s => s?.HasEffect == true);
+        OpenMasterEffectCommand = new RelayCommand<MasterEffectSlot>(OpenMasterEffect, s => s?.HasEffect == true);
+        
+        // Export command
+        ExportCommand = new RelayCommand(OpenExportWindow, () => Tracks.Count > 0);
+        
+        // Options command
+        OpenOptionsCommand = new RelayCommand(OpenOptionsWindow);
+        
+        // Project commands
+        NewProjectCommand = new AsyncRelayCommand(CreateNewProjectAsync);
+        OpenProjectCommand = new AsyncRelayCommand(OpenProjectAsync);
+        SaveProjectCommand = new AsyncRelayCommand(SaveProjectAsync);
+        SaveProjectAsCommand = new AsyncRelayCommand(SaveProjectAsAsync);
+        
+        // Initialize File Menu (after commands are ready)
         FileMenuViewModel = new FileMenuViewModel(projectService, fileSystemService, settingsService, this);
 
         // Sync BPM between global state and local state
@@ -97,31 +136,14 @@ public class MainViewModel : INotifyPropertyChanged
         
         // Initialize keyboard shortcuts - temporär auskommentiert für Debugging
         // KeyboardShortcutManager = new KeyboardShortcutManager(FileMenuViewModel);
-        // Initialize commands
-        PlayAllCommand = new RelayCommand(PlayAll);
-        PauseAllCommand = new RelayCommand(PauseAll, () => IsPlaying);
-        StopAllCommand = new RelayCommand(StopAll);
-        AddTrackCommand = new RelayCommand(AddTrack);
-        RemoveTrackCommand = new RelayCommand(RemoveTrack, () => SelectedTrack is not null);
-        AnalyzeCommand = new RelayCommand(Analyze, () => SelectedTrack is not null);
-        OpenSamplerCommand = new RelayCommand<Track>(t => OpenSampler(t), _ => SelectedTrack is not null);
-        
-        // Master effects commands
-        AddMasterEffectCommand = new RelayCommand<MasterEffectSlot>(AddMasterEffect);
-        RemoveMasterEffectCommand = new RelayCommand<MasterEffectSlot>(RemoveMasterEffect, s => s?.HasEffect == true);
-        OpenMasterEffectCommand = new RelayCommand<MasterEffectSlot>(OpenMasterEffect, s => s?.HasEffect == true);
-        
-        // Initialize master effect slots (10 slots)
+
+        // Initialize master effect slots (10 slots) wired to the audio engine
         for (int i = 1; i <= 10; i++)
         {
-            MasterEffectSlots.Add(new MasterEffectSlot(i));
+            var slot = new MasterEffectSlot(i);
+            slot.SetOwnerChain(MixEngine.MasterEffectChain);
+            MasterEffectSlots.Add(slot);
         }
-        
-        // Project commands
-        NewProjectCommand = new AsyncRelayCommand(CreateNewProjectAsync);
-        OpenProjectCommand = new AsyncRelayCommand(OpenProjectAsync);
-        SaveProjectCommand = new AsyncRelayCommand(SaveProjectAsync);
-        SaveProjectAsCommand = new AsyncRelayCommand(SaveProjectAsAsync);
         
         // Subscribe to project events
         EnhancedProjectService.ProjectLoaded += OnProjectLoaded;
@@ -136,6 +158,13 @@ public class MainViewModel : INotifyPropertyChanged
                 foreach (Track newTrack in e.NewItems)
                 {
                     newTrack.PropertyChanged += OnTrackPropertyChanged;
+                    
+                    // Auto-create mixer channel for any track added to the collection
+                    // (whether loaded from project or added manually)
+                    if (!MixerChannels.Any(mc => mc.SourceTrack == newTrack))
+                    {
+                        CreateMixerChannelForTrack(newTrack);
+                    }
                 }
             }
             UpdateAllTrackVolumes();
@@ -150,7 +179,11 @@ public class MainViewModel : INotifyPropertyChanged
         // View menu
         ToggleAudioBrowserCommand = new RelayCommand(() => IsAudioBrowserVisible = !IsAudioBrowserVisible);
         BuildAnsichtMenu();
-        
+
+        // Subscribe to mixer channel routing changes so the audio graph
+        // is rebuilt automatically when sends are added/removed during playback
+        SubscribeToMixerChannelRouting();
+
         // No default tracks - start with empty project
         _trackCounter = 0;
     }
@@ -199,6 +232,7 @@ public class MainViewModel : INotifyPropertyChanged
         
         Tracks.Add(track);
         SelectedTrack = track; // Auto-select the new track
+        // MixerChannel creation happens automatically via Tracks.CollectionChanged
     }
 
     /// <summary>
@@ -379,6 +413,155 @@ public class MainViewModel : INotifyPropertyChanged
     // Master Effects
     public ObservableCollection<MasterEffectSlot> MasterEffectSlots { get; } = [];
     
+    // ── Mixer Routing System ────────────────────────────────────────────
+
+    /// <summary>
+    /// Mixer channels for routing system (FL Studio style).
+    /// Channel 0 is reserved for Master.
+    /// Channels 1+ can be empty or linked to tracks.
+    /// </summary>
+    public ObservableCollection<Models.Mixer.MixerChannel> MixerChannels { get; } = [];
+
+    private Models.Mixer.MixerChannel? _selectedMixerChannel;
+
+    /// <summary>
+    /// Currently selected mixer channel (for routing visualization).
+    /// </summary>
+    public Models.Mixer.MixerChannel? SelectedMixerChannel
+    {
+        get => _selectedMixerChannel;
+        set
+        {
+            if (_selectedMixerChannel != null)
+                _selectedMixerChannel.IsSelected = false;
+            if (SetField(ref _selectedMixerChannel, value) && value != null)
+                value.IsSelected = true;
+        }
+    }
+
+    /// <summary>
+    /// Creates a new empty mixer channel.
+    /// </summary>
+    public void AddEmptyMixerChannel()
+    {
+        int nextNumber = MixerChannels.Count > 0 
+            ? MixerChannels.Max(c => c.ChannelNumber) + 1 
+            : 1;
+        
+        var channel = new Models.Mixer.MixerChannel(nextNumber)
+        {
+            Color = TrackColors[(nextNumber - 1) % TrackColors.Length]
+        };
+        
+        MixerChannels.Add(channel);
+        StatusMessage = $"✓ Mixer Channel {nextNumber} erstellt";
+    }
+
+    /// <summary>
+    /// Removes an empty mixer channel.
+    /// </summary>
+    public void RemoveMixerChannel(Models.Mixer.MixerChannel channel)
+    {
+        if (channel.SourceTrack != null)
+        {
+            StatusMessage = "✗ Kann Channel mit Track nicht löschen";
+            return;
+        }
+
+        // Remove any sends to this channel from other channels
+        foreach (var otherChannel in MixerChannels)
+        {
+            otherChannel.SendTargets.Remove(channel.ChannelNumber);
+        }
+
+        MixerChannels.Remove(channel);
+        if (SelectedMixerChannel == channel)
+            SelectedMixerChannel = null;
+            
+        StatusMessage = $"✓ Mixer Channel {channel.ChannelNumber} entfernt";
+    }
+
+    /// <summary>
+    /// Toggles routing between two channels.
+    /// </summary>
+    public void ToggleChannelRouting(Models.Mixer.MixerChannel source, Models.Mixer.MixerChannel target)
+    {
+        if (source == target)
+        {
+            StatusMessage = "✗ Kann Channel nicht zu sich selbst routen";
+            return;
+        }
+
+        // Only check for cycles when we are about to ADD a send (not remove)
+        if (!source.SendTargets.Contains(target.ChannelNumber))
+        {
+            if (WouldCreateCycle(source, target))
+            {
+                StatusMessage = $"✗ Loop verhindert: {target.Name} → … → {source.Name} existiert bereits";
+                return;
+            }
+        }
+
+        source.ToggleSend(target.ChannelNumber);
+
+        if (source.SendTargets.Contains(target.ChannelNumber))
+            StatusMessage = $"✓ {source.Name} → {target.Name}";
+        else
+            StatusMessage = $"✗ {source.Name} ⊗ {target.Name}";
+    }
+
+    /// <summary>
+    /// Returns true if adding a send from <paramref name="source"/> to
+    /// <paramref name="target"/> would create a routing cycle.
+    ///
+    /// A cycle exists when <paramref name="source"/> is reachable from
+    /// <paramref name="target"/> through the current send graph — i.e.
+    /// target already (directly or indirectly) feeds back into source.
+    ///
+    /// Uses iterative BFS on the directed send graph.
+    /// </summary>
+    public bool WouldCreateCycle(Models.Mixer.MixerChannel source, Models.Mixer.MixerChannel target)
+    {
+        // Self-loop is always a cycle
+        if (source == target) return true;
+
+        // BFS: starting from `target`, follow all SendTargets.
+        // If we reach `source`, adding source→target would close the loop.
+        var visited = new HashSet<int>();
+        var queue   = new Queue<int>();
+        queue.Enqueue(target.ChannelNumber);
+
+        while (queue.Count > 0)
+        {
+            int current = queue.Dequeue();
+            if (!visited.Add(current)) continue;
+
+            // If we've reached the source channel, a cycle would be created
+            if (current == source.ChannelNumber) return true;
+
+            var currentChannel = MixerChannels.FirstOrDefault(c => c.ChannelNumber == current);
+            if (currentChannel == null) continue;
+
+            foreach (var nextNum in currentChannel.SendTargets)
+                if (!visited.Contains(nextNum))
+                    queue.Enqueue(nextNum);
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Moves a mixer channel to a new position in the display order.
+    /// </summary>
+    public void MoveMixerChannel(Models.Mixer.MixerChannel channel, int newIndex)
+    {
+        int oldIndex = MixerChannels.IndexOf(channel);
+        if (oldIndex < 0 || oldIndex == newIndex) return;
+        newIndex = Math.Clamp(newIndex, 0, MixerChannels.Count - 1);
+        MixerChannels.Move(oldIndex, newIndex);
+        StatusMessage = $"↔ {channel.Name} nach Position {newIndex + 1}";
+    }
+    
     /// <summary>
     /// Available effect types for selection.
     /// </summary>
@@ -404,6 +587,8 @@ public class MainViewModel : INotifyPropertyChanged
     public ICommand AddMasterEffectCommand { get; private set; } = null!;
     public ICommand RemoveMasterEffectCommand { get; private set; } = null!;
     public ICommand OpenMasterEffectCommand { get; private set; } = null!;
+    public ICommand ExportCommand { get; private set; } = null!;
+    public ICommand OpenOptionsCommand { get; private set; } = null!;
     public ICommand NewProjectCommand { get; private set; } = null!;
     public ICommand OpenProjectCommand { get; private set; } = null!;
     public ICommand SaveProjectCommand { get; private set; } = null!;
@@ -474,38 +659,301 @@ public class MainViewModel : INotifyPropertyChanged
     #endregion
 
     /// <summary>
-    /// Plays all tracks simultaneously.
+    /// Opens a save dialog, then shows the export window which renders immediately.
+    /// </summary>
+    private void OpenExportWindow()
+    {
+        // Stop playback first
+        if (IsPlaying) StopAll();
+        
+        // Ask the user where to export first
+        var dlg = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "Audio exportieren",
+            Filter = "WAV Audio|*.wav|MP3 Audio|*.mp3|FLAC Audio|*.flac|All Files|*.*",
+            DefaultExt = ".wav",
+            FileName = "export.wav"
+        };
+
+        if (dlg.ShowDialog() != true)
+            return;
+
+        var exportWindow = new Views.ExportWindow(
+            Tracks.ToList().AsReadOnly(),
+            MixEngine.MasterEffectChain,
+            MasterVolume,
+            dlg.FileName)
+        {
+            Owner = System.Windows.Application.Current?.MainWindow,
+            WindowStartupLocation = System.Windows.WindowStartupLocation.CenterOwner
+        };
+        exportWindow.ShowDialog();
+    }
+
+    /// <summary>
+    /// Opens the Options / Settings window.
+    /// </summary>
+    private void OpenOptionsWindow()
+    {
+        var optionsWindow = new Views.OptionsWindow(this)
+        {
+            Owner = System.Windows.Application.Current?.MainWindow,
+            WindowStartupLocation = System.Windows.WindowStartupLocation.CenterOwner
+        };
+        optionsWindow.ShowDialog();
+    }
+
+    /// <summary>
+    /// Plays all tracks simultaneously, honouring the mixer routing graph.
+    /// Channels with SendTargets route their audio into the target channel's sub-mixer;
+    /// channels with no sends go straight to the master bus.
     /// </summary>
     private void PlayAll()
     {
-        var hasSolo = Tracks.Any(t => t.IsSolo);
-        var playable = Tracks.Where(t => !string.IsNullOrEmpty(t.FilePath)).ToList();
+        var hasSolo    = Tracks.Any(t => t.IsSolo);
+        var playable   = Tracks.Where(t => !string.IsNullOrEmpty(t.FilePath)).ToList();
+        var startBeat  = ArrangementVm.PlayheadBeat;
+        var startTime  = TimeSpan.FromSeconds(startBeat * 60.0 / BPM);
 
-        // Convert the arrangement playhead position to a TimeSpan
-        var startBeat = ArrangementVm.PlayheadBeat;
-        var startTime = TimeSpan.FromSeconds(startBeat * 60.0 / BPM);
-
-        // Phase 1: pre-load all audio pipelines, seek to playhead, and connect to the mix bus
+        // ── Phase 1: pre-load, seek, volume ──────────────────────────────
         foreach (var track in playable)
         {
             track.TargetMixFormat = MixEngine.MixFormat;
             track.EnsureLoaded();
             track.SetPosition(startTime);
             track.UpdatePlayerVolume(MasterVolume, hasSolo);
-
-            if (track.Output is not null)
-                MixEngine.AddInput(track.Output);
         }
 
-        // Phase 2: single Play() call — all tracks start in the same audio callback
-        MixEngine.Play();
+        // ── Phase 2: build routing graph ─────────────────────────────────
+        RebuildRoutingGraph();
 
+        // ── Phase 3: start playback ───────────────────────────────────────
+        MixEngine.Play();
         foreach (var track in playable)
-            track.Play();   // just sets IsPlaying + starts meter timer
-        
-        IsPlaying = true;
+            track.Play();
+
+        IsPlaying      = true;
         CurrentPosition = startTime;
-        StatusMessage = $"▶ Spielt {playable.Count} Track(s)";
+        StatusMessage  = $"▶ Spielt {playable.Count} Track(s)";
+    }
+
+    /// <summary>
+    /// Rebuilds the NAudio routing graph from the current MixerChannel send targets.
+    /// 
+    /// Signal flow when Channel A sends to Channel B:
+    ///   Track A → sub-mixer[B]
+    ///   Track B → sub-mixer[B]  (at MasterVolume only; Track.Volume applied as bus fader)
+    ///   sub-mixer[B] → VolumeSampleProvider(B.Volume) → MeteringSampleProvider → master
+    ///
+    /// This means:
+    ///   • Channel B's fader now controls the COMBINED level of A + B. ✓
+    ///   • Channel B's meter shows the combined bus signal.           ✓
+    ///   • Muting B silences A's signal too.                         ✓
+    /// </summary>
+    private void RebuildRoutingGraph()
+    {
+        bool hasSolo = Tracks.Any(t => t.IsSolo);
+
+        // ── Clean up previous routing state ──────────────────────────────────
+        foreach (var ch in MixerChannels)
+            ch.SourceTrack?.SetBusMeter(null);
+        _busFaders.Clear();
+        _busPanners.Clear();
+        MixEngine.RemoveAllInputs();
+
+        // ── Identify bus channels (those that receive at least one send) ──────
+        var allTargetNums = MixerChannels
+            .SelectMany(c => c.SendTargets)
+            .ToHashSet();
+
+        var subMixers = new Dictionary<int, NAudio.Wave.SampleProviders.MixingSampleProvider>();
+        foreach (var targetNum in allTargetNums)
+            subMixers[targetNum] = new NAudio.Wave.SampleProviders.MixingSampleProvider(MixEngine.MixFormat)
+                { ReadFully = true };
+
+        // ── Phase 1 — Fan-out with BroadcastSampleProvider ───────────────────
+        // Problem without this: two sub-mixers both hold the same ISampleProvider
+        // reference.  NAudio reads inputs sequentially, so sub-mixer B reads
+        // samples 0–N and sub-mixer C then reads N+1–2N from the SAME stream —
+        // a full buffer-length desync (≈ 23 ms at 44 100 Hz).
+        //
+        // BroadcastSampleProvider caches the result of the first Read and hands
+        // identical data to every subsequent consumer in the same audio cycle.
+        foreach (var channel in MixerChannels)
+        {
+            var track = channel.SourceTrack;
+            if (track?.Output == null) continue;
+
+            var adapted    = MixEngine.AdaptFormat(track.Output);
+            var targetNums = channel.SendTargets.ToList();
+
+            if (targetNums.Count > 0)
+            {
+                // Split the stream: each target sub-mixer gets a synchronised consumer
+                var consumers = DAW.Audio.BroadcastSampleProvider.Split(adapted, targetNums.Count);
+                for (int i = 0; i < targetNums.Count; i++)
+                    if (subMixers.TryGetValue(targetNums[i], out var sm))
+                        sm.AddMixerInput(consumers[i]);
+            }
+            else
+            {
+                // No sends: own audio goes straight to master
+                // Apply channel pan before reaching master
+                ISampleProvider toMaster = adapted;
+                if (Math.Abs(channel.Pan) > 0.001)
+                {
+                    var panProvider = new DAW.Audio.VolumePanSampleProvider(adapted);
+                    panProvider.Pan = (float)channel.Pan;
+                    toMaster = panProvider;
+                }
+                MixEngine.AddInput(toMaster);
+            }
+        }
+
+        // ── Phase 2 — Plugin Delay Compensation (PDC) ────────────────────────
+        // For each sub-mixer, find the maximum EffectChain.TotalLatencySamples
+        // across all contributing sources and prepend DelayLineProviders on
+        // shorter paths so every input arrives at the mix point in time.
+        //
+        // All built-in effects currently return LatencySamples = 0 (sample-accurate
+        // processing), so this loop is a no-op today but fires automatically as
+        // soon as any effect (e.g. look-ahead compressor) reports non-zero latency.
+        foreach (var (channelNum, subMixer) in subMixers)
+        {
+            var senderLatencies = MixerChannels
+                .Where(c => c.SendTargets.Contains(channelNum) && c.SourceTrack?.Output != null)
+                .Select(c => (channel: c, latency: c.SourceTrack!.EffectChain.TotalLatencySamples))
+                .ToList();
+
+            int maxLatency = senderLatencies.Count > 0 ? senderLatencies.Max(s => s.latency) : 0;
+            if (maxLatency == 0) continue;
+
+            // Rebuild this sub-mixer's inputs with compensation delays
+            // (clear + re-add because NAudio's Sources list is internal)
+            foreach (var (senderCh, latency) in senderLatencies)
+            {
+                int compensation = maxLatency - latency;
+                if (compensation <= 0) continue;
+
+                var adapted     = MixEngine.AdaptFormat(senderCh.SourceTrack!.Output);
+                var compensated = (NAudio.Wave.ISampleProvider)
+                    new DAW.Audio.DelayLineProvider(adapted, compensation);
+
+                subMixer.AddMixerInput(compensated);
+            }
+        }
+
+        // ── Phase 3 — Connect buses to master via reactive bus fader + pan + meter ──
+        foreach (var (channelNum, subMixer) in subMixers)
+        {
+            var targetCh  = MixerChannels.FirstOrDefault(c => c.ChannelNumber == channelNum);
+            var targetTrk = targetCh?.SourceTrack;
+
+            bool muted = targetTrk != null &&
+                         (targetTrk.IsMuted || !targetTrk.IsEnabled || (hasSolo && !targetTrk.IsSolo));
+            float busVol = muted ? 0f : (float)(targetTrk?.Volume ?? 1.0);
+            float busPan = (float)(targetCh?.Pan ?? 0.0);
+
+            // Use VolumePanSampleProvider so both volume AND pan are reactive on the bus
+            var busPanner = new DAW.Audio.VolumePanSampleProvider(subMixer)
+            {
+                Volume = busVol,
+                Pan    = busPan
+            };
+            if (targetTrk != null)
+            {
+                _busFaders[targetTrk]  = new NAudio.Wave.SampleProviders.VolumeSampleProvider(subMixer) { Volume = busVol }; // kept for UpdateBusFaderForTrack compat
+                _busPanners[targetTrk] = busPanner;
+            }
+
+            // Replace busFader with busPanner in the signal chain
+            var busMeter = new DAW.Audio.MeteringSampleProvider(busPanner);
+            targetTrk?.SetBusMeter(busMeter);
+
+            if (targetCh?.SendTargets.Count > 0)
+            {
+                foreach (var nextNum in targetCh.SendTargets)
+                {
+                    if (subMixers.TryGetValue(nextNum, out var nextSm))
+                        nextSm.AddMixerInput(busMeter);
+                    else
+                        MixEngine.AddInput(busMeter);
+                }
+            }
+            else
+            {
+                MixEngine.AddInput(busMeter);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reactively updates the send bus fader volume AND pan when a routing-target
+    /// track's Volume, IsMuted, IsSolo, or the mixer channel's Pan changes.
+    /// </summary>
+    private void UpdateBusFaderForTrack(Track track)
+    {
+        var hasSolo = Tracks.Any(t => t.IsSolo);
+        bool muted  = track.IsMuted || !track.IsEnabled || (hasSolo && !track.IsSolo);
+        float vol   = muted ? 0f : (float)track.Volume;
+
+        // Update legacy fader (kept for API compat)
+        if (_busFaders.TryGetValue(track, out var fader))
+            fader.Volume = vol;
+
+        // Update the pan-capable bus panner (used in the actual signal chain)
+        if (_busPanners.TryGetValue(track, out var panner))
+        {
+            panner.Volume = vol;
+            // Sync pan from the mixer channel
+            var mixCh = MixerChannels.FirstOrDefault(c => c.SourceTrack == track);
+            if (mixCh != null)
+                panner.Pan = (float)mixCh.Pan;
+        }
+    }
+
+    /// <summary>
+    /// Reactively updates the bus panner when a MixerChannel's Pan property changes.
+    /// </summary>
+    private void UpdateBusPanForChannel(Models.Mixer.MixerChannel channel)
+    {
+        var track = channel.SourceTrack;
+        if (track == null) return;
+        if (_busPanners.TryGetValue(track, out var panner))
+            panner.Pan = (float)channel.Pan;
+    }
+
+    /// <summary>
+    /// Subscribes to SendTargets changes on every mixer channel so routing changes
+    /// during playback are applied immediately without stopping the audio device.
+    /// </summary>
+    private void SubscribeToMixerChannelRouting()
+    {
+        foreach (var channel in MixerChannels)
+            SubscribeChannelRouting(channel);
+
+        MixerChannels.CollectionChanged += (_, e) =>
+        {
+            if (e.NewItems != null)
+                foreach (Models.Mixer.MixerChannel ch in e.NewItems)
+                    SubscribeChannelRouting(ch);
+        };
+    }
+
+    private void SubscribeChannelRouting(Models.Mixer.MixerChannel channel)
+    {
+        channel.SendTargets.CollectionChanged += (_, _) =>
+        {
+            if (IsPlaying)
+                System.Windows.Application.Current?.Dispatcher.InvokeAsync(RebuildRoutingGraph);
+        };
+
+        // Reactively apply pan changes to the live bus panner without rebuilding
+        channel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Models.Mixer.MixerChannel.Pan))
+                UpdateBusPanForChannel(channel);
+        };
     }
 
     /// <summary>
@@ -531,12 +979,16 @@ public class MainViewModel : INotifyPropertyChanged
     {
         MixEngine.Stop();
         MixEngine.RemoveAllInputs();
-        
+
+        // Clear bus-meter overrides, bus faders, and bus panners
+        foreach (var ch in MixerChannels)
+            ch.SourceTrack?.SetBusMeter(null);
+        _busFaders.Clear();
+        _busPanners.Clear();
+
         foreach (var track in Tracks)
-        {
             track.Stop();
-        }
-        
+
         CurrentPosition = TimeSpan.Zero;
         IsPlaying = false;
         StatusMessage = "⏹ Gestoppt";
@@ -568,10 +1020,32 @@ public class MainViewModel : INotifyPropertyChanged
             if (track != null)
             {
                 Tracks.Add(track);
+                // MixerChannel creation happens automatically via Tracks.CollectionChanged
             }
         }
         
         StatusMessage = $"✓ {filePaths.Length} Track(s) hinzugefügt";
+    }
+    
+    /// <summary>
+    /// Creates a mixer channel for a track.
+    /// </summary>
+    private void CreateMixerChannelForTrack(Track track)
+    {
+        int channelNumber = MixerChannels.Count > 0 
+            ? MixerChannels.Max(c => c.ChannelNumber) + 1 
+            : 1;
+        
+        var channel = new Models.Mixer.MixerChannel(channelNumber)
+        {
+            SourceTrack = track,
+            Name = track.Title,
+            Color = track.ChannelColor,
+            Volume = track.Volume,
+            Pan = track.Pan
+        };
+        
+        MixerChannels.Add(channel);
     }
     
     /// <summary>
@@ -609,6 +1083,19 @@ public class MainViewModel : INotifyPropertyChanged
         SelectedTrack.Dispose();
         
         var trackToRemove = SelectedTrack;
+        
+        // Remove associated mixer channel
+        var mixerChannel = MixerChannels.FirstOrDefault(mc => mc.SourceTrack == trackToRemove);
+        if (mixerChannel != null)
+        {
+            // Remove any sends to/from this channel
+            foreach (var otherChannel in MixerChannels)
+            {
+                otherChannel.SendTargets.Remove(mixerChannel.ChannelNumber);
+            }
+            MixerChannels.Remove(mixerChannel);
+        }
+        
         SelectedTrack = null;
         Tracks.Remove(trackToRemove);
         
@@ -652,6 +1139,7 @@ public class MainViewModel : INotifyPropertyChanged
             case nameof(Track.IsMuted):
             case nameof(Track.IsSolo):
                 UpdateAllTrackVolumes();
+                UpdateBusFaderForTrack(track); // keep bus fader in sync for routing targets
                 break;
         }
     }

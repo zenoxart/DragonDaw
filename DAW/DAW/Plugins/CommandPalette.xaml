@@ -48,7 +48,7 @@
         </Style>
     </Window.Resources>
     
-    <Border Background="#161B22" BorderBrush="#26619C" BorderThickness="1" CornerRadius="12">
+    <Border Background="{DynamicResource PanelBg}" BorderBrush="#26619C" BorderThickness="1" CornerRadius="12">
         <Border.Effect>
             <DropShadowEffect BlurRadius="30" ShadowDepth="10" Opacity="0.6" Color="Black"/>
         </Border.Effect>
@@ -73,14 +73,14 @@
                     <TextBlock Grid.Column="0" Text="🔌" FontSize="18" VerticalAlignment="Center" Margin="0,0,12,0"/>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                         <TextBlock Text="Plugin Browser" FontWeight="Bold" Foreground="White" FontSize="14"/>
-                        <TextBlock Text="Type to search effects and plugins" Foreground="#8899AA" FontSize="10"/>
+                        <TextBlock Text="Type to search effects and plugins" Foreground="{DynamicResource TextSecondary}" FontSize="10"/>
                     </StackPanel>
-                    <TextBlock Grid.Column="2" Text="ESC to close" Foreground="#667788" FontSize="10" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="2" Text="ESC to close" Foreground="{DynamicResource TextDim}" FontSize="10" VerticalAlignment="Center"/>
                 </Grid>
             </Border>
             
             <!-- Search Input -->
-            <Border Grid.Row="1" Background="#0D1117" Padding="4">
+            <Border Grid.Row="1" Background="{DynamicResource DarkBg}" Padding="4">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -113,7 +113,7 @@
                             </Grid.ColumnDefinitions>
                             
                             <!-- Icon -->
-                            <Border Grid.Column="0" Background="#21262D" CornerRadius="6" 
+                            <Border Grid.Column="0" Background="{DynamicResource ControlBg}" CornerRadius="6" 
                                     Width="32" Height="32" HorizontalAlignment="Left">
                                 <TextBlock Text="{Binding Icon}" FontSize="16" 
                                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -142,7 +142,7 @@
             </ListBox>
             
             <!-- Footer -->
-            <Border Grid.Row="3" Background="#0D1117" CornerRadius="0,0,12,12" Padding="12,8">
+            <Border Grid.Row="3" Background="{DynamicResource DarkBg}" CornerRadius="0,0,12,12" Padding="12,8">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>

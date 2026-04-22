@@ -10,11 +10,12 @@ public static class EffectFactory
     /// </summary>
     public static readonly (string Type, string Name, string Icon)[] AvailableEffects =
     [
-        ("Equalizer", "3-Band EQ", "📊"),
-        ("Compressor", "Compressor", "📉"),
-        ("Reverb", "Reverb", "🏛️"),
-        ("Delay", "Delay", "🔁"),
-        ("Gain", "Gain", "🔊"),
+        ("Equalizer",   "3-Band EQ",   "📊"),
+        ("Compressor",  "Compressor",  "📉"),
+        ("Reverb",      "Reverb",      "🏛️"),
+        ("Delay",       "Delay",       "🔁"),
+        ("Gain",        "Gain",        "🔊"),
+        ("Saturation",  "Saturation",  "🔥"),
     ];
 
     /// <summary>
@@ -24,11 +25,12 @@ public static class EffectFactory
     {
         return effectType switch
         {
-            "Equalizer" => new EqualizerEffect(),
+            "Equalizer"  => new EqualizerEffect(),
             "Compressor" => new CompressorEffect(),
-            "Reverb" => new ReverbEffect(),
-            "Delay" => new DelayEffect(),
-            "Gain" => new GainEffect(),
+            "Reverb"     => new ReverbEffect(),
+            "Delay"      => new DelayEffect(),
+            "Gain"       => new GainEffect(),
+            "Saturation" => new SaturationEffect(),
             _ => null
         };
     }

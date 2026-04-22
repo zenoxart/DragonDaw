@@ -133,6 +133,7 @@ public sealed class ArrangementViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(IsSnapQuarter));
             OnPropertyChanged(nameof(IsSnapEighth));
             OnPropertyChanged(nameof(IsSnapSixteenth));
+            OnPropertyChanged(nameof(SnapSelectedIndex));
         }
     }
 
@@ -149,6 +150,33 @@ public sealed class ArrangementViewModel : INotifyPropertyChanged
     public bool IsSnapQuarter => _snapResolution == 1.0;
     public bool IsSnapEighth => _snapResolution == 0.5;
     public bool IsSnapSixteenth => _snapResolution == 0.25;
+
+    /// <summary>ComboBox-friendly index: 0=OFF, 1=1/4, 2=1/8, 3=1/16, 4=1/32.</summary>
+    public int SnapSelectedIndex
+    {
+        get => _snapResolution switch
+        {
+            0.0  => 0,
+            1.0  => 1,
+            0.5  => 2,
+            0.25 => 3,
+            0.125 => 4,
+            _ => 1
+        };
+        set
+        {
+            SnapResolution = value switch
+            {
+                0 => 0.0,
+                1 => 1.0,
+                2 => 0.5,
+                3 => 0.25,
+                4 => 0.125,
+                _ => 1.0
+            };
+            OnPropertyChanged(nameof(SnapSelectedIndex));
+        }
+    }
 
     // ── Playhead ───────────────────────────────────────────────────────────────
     public double PlayheadBeat

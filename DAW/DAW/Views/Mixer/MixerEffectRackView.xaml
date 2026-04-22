@@ -6,7 +6,7 @@
              xmlns:local="clr-namespace:DAW.Views.Mixer"
              mc:Ignorable="d" 
              d:DesignHeight="500" d:DesignWidth="240"
-             Background="#161B22">
+             Background="{DynamicResource PanelBg}">
     
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
@@ -16,9 +16,9 @@
         
         <!-- Slot Style -->
         <Style x:Key="SlotButton" TargetType="Button">
-            <Setter Property="Background" Value="#1A1F26"/>
-            <Setter Property="Foreground" Value="#8B949E"/>
-            <Setter Property="BorderBrush" Value="#30363D"/>
+            <Setter Property="Background" Value="{DynamicResource DropdownBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
@@ -33,8 +33,8 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#21262D"/>
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="#5BA4E6"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ControlBg}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource LapisAccentBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -44,9 +44,9 @@
         
         <!-- Active Slot Style -->
         <Style x:Key="ActiveSlotButton" TargetType="Button" BasedOn="{StaticResource SlotButton}">
-            <Setter Property="Background" Value="#1C2A3A"/>
-            <Setter Property="Foreground" Value="#C9D1D9"/>
-            <Setter Property="BorderBrush" Value="#26619C"/>
+            <Setter Property="Background" Value="{DynamicResource HighlightBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource LapisBlueBrush}"/>
         </Style>
         
         <!-- Mix Knob Style -->
@@ -60,13 +60,13 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Slider">
                         <Grid>
-                            <Border Background="#0D1117" CornerRadius="2" Height="4" VerticalAlignment="Center"/>
+                            <Border Background="{DynamicResource DarkBg}" CornerRadius="2" Height="4" VerticalAlignment="Center"/>
                             <Track x:Name="PART_Track">
                                 <Track.Thumb>
                                     <Thumb Width="10" Height="10">
                                         <Thumb.Template>
                                             <ControlTemplate>
-                                                <Ellipse Fill="#5BA4E6" Stroke="#3A7BC8" StrokeThickness="1"/>
+                                                <Ellipse Fill="{DynamicResource LapisAccentBrush}" Stroke="{DynamicResource LapisLightBrush}" StrokeThickness="1"/>
                                             </ControlTemplate>
                                         </Thumb.Template>
                                     </Thumb>
@@ -82,10 +82,10 @@
         <Style x:Key="BypassToggle" TargetType="ToggleButton">
             <Setter Property="Width" Value="20"/>
             <Setter Property="Height" Value="20"/>
-            <Setter Property="Background" Value="#21262D"/>
-            <Setter Property="Foreground" Value="#666"/>
+            <Setter Property="Background" Value="{DynamicResource ControlBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextDim}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="BorderBrush" Value="#30363D"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -103,7 +103,7 @@
                                 <Setter Property="Foreground" Value="White"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="#5BA4E6"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource LapisAccentBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -120,7 +120,7 @@
         </Grid.RowDefinitions>
         
         <!-- Header -->
-        <Border Grid.Row="0" Background="#21262D" Padding="12,10">
+        <Border Grid.Row="0" Background="{DynamicResource ControlBg}" Padding="12,10">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -130,7 +130,7 @@
                 <TextBlock x:Name="TitleText" 
                            Grid.Column="1"
                            Text="Mixer – Master" 
-                           Foreground="#C9D1D9" 
+                           Foreground="{DynamicResource TextPrimary}" 
                            FontSize="13" 
                            FontWeight="SemiBold"
                            VerticalAlignment="Center"/>
@@ -138,8 +138,8 @@
         </Border>
         
         <!-- Status Bar -->
-        <Border x:Name="StatusBar" Grid.Row="1" Background="#1A1F26" Padding="10,4" Visibility="Collapsed">
-            <TextBlock x:Name="StatusText" Foreground="#8B949E" FontSize="10"/>
+        <Border x:Name="StatusBar" Grid.Row="1" Background="{DynamicResource DropdownBg}" Padding="10,4" Visibility="Collapsed">
+            <TextBlock x:Name="StatusText" Foreground="{DynamicResource TextSecondary}" FontSize="10"/>
         </Border>
         
         <!-- Effect Slots -->
@@ -147,8 +147,8 @@
             <ItemsControl x:Name="SlotsContainer">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type local:EffectSlotViewData}">
-                        <Border Margin="0,2" Background="#1A1F26" CornerRadius="4" 
-                                BorderBrush="#30363D" BorderThickness="1">
+                        <Border Margin="0,2" Background="{DynamicResource DropdownBg}" CornerRadius="4" 
+                                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
                             <StackPanel>
                                 <!-- Slot Header Row -->
                                 <Grid Margin="6,4">
@@ -162,7 +162,7 @@
                                     <!-- Slot Number -->
                                     <TextBlock Grid.Column="0" 
                                                Text="{Binding SlotIndex}" 
-                                               Foreground="#484F58" 
+                                               Foreground="{DynamicResource TextDim}" 
                                                FontSize="9" 
                                                FontWeight="Bold"
                                                Width="14"
@@ -175,7 +175,7 @@
                                             Tag="{Binding SlotIndex}"
                                             Background="Transparent"
                                             BorderThickness="0"
-                                            Foreground="#8B949E"
+                                            Foreground="{DynamicResource TextSecondary}"
                                             FontSize="10"
                                             Padding="4,2"
                                             Cursor="Hand"
@@ -191,9 +191,9 @@
                                             <Style TargetType="Button" BasedOn="{StaticResource SlotButton}">
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding HasPlugin}" Value="True">
-                                                        <Setter Property="Background" Value="#1C2A3A"/>
-                                                        <Setter Property="Foreground" Value="#C9D1D9"/>
-                                                        <Setter Property="BorderBrush" Value="#26619C"/>
+                                                        <Setter Property="Background" Value="{DynamicResource HighlightBg}"/>
+                                                        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+                                                        <Setter Property="BorderBrush" Value="{DynamicResource LapisBlueBrush}"/>
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
@@ -215,7 +215,7 @@
                                 </Grid>
                                 
                                 <!-- Expanded Content (Mix Knob + Remove) -->
-                                <Border Background="#151A20" 
+                                <Border Background="{DynamicResource DarkBg}" 
                                         Margin="6,0,6,6" 
                                         Padding="8,6" 
                                         CornerRadius="3"
@@ -230,7 +230,7 @@
                                         
                                         <!-- Mix Label -->
                                         <TextBlock Grid.Column="0" Text="Mix" 
-                                                   Foreground="#667788" FontSize="9" 
+                                                   Foreground="{DynamicResource TextDim}" FontSize="9" 
                                                    VerticalAlignment="Center" Margin="0,0,8,0"/>
                                         
                                         <!-- Mix Slider -->
@@ -243,7 +243,7 @@
                                         <!-- Mix Value Display -->
                                         <TextBlock Grid.Column="2" 
                                                    Text="{Binding MixDisplay}" 
-                                                   Foreground="#5BA4E6" 
+                                                   Foreground="{DynamicResource LapisAccentBrush}" 
                                                    FontSize="9"
                                                    Width="35"
                                                    VerticalAlignment="Center"
@@ -275,7 +275,7 @@
                 Background="#80000000" Visibility="Collapsed">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                 <TextBlock Text="⏳" FontSize="24" HorizontalAlignment="Center"/>
-                <TextBlock Text="Laden..." Foreground="#8B949E" FontSize="11" Margin="0,8,0,0"/>
+                <TextBlock Text="Laden..." Foreground="{DynamicResource TextSecondary}" FontSize="11" Margin="0,8,0,0"/>
             </StackPanel>
         </Border>
     </Grid>

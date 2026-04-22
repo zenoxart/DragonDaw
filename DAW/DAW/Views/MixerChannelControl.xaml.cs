@@ -1,10 +1,30 @@
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using DAW.Models;
 using DAW.ViewModels;
 
 namespace DAW.Views;
+
+/// <summary>
+/// Multiplies a double value by a fraction parameter. Used to compute proportional heights.
+/// </summary>
+public class FractionConverter : IValueConverter
+{
+    public static readonly FractionConverter Instance = new();
+
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is double d && parameter is string s && double.TryParse(s, CultureInfo.InvariantCulture, out var frac))
+            return Math.Max(0, d * frac);
+        return 0.0;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotImplementedException();
+}
 
 /// <summary>
 /// A mixer channel strip control representing a single track's mixer controls.
@@ -31,6 +51,16 @@ public partial class MixerChannelControl : UserControl
     {
         get => (bool)GetValue(IsSelectedProperty);
         set => SetValue(IsSelectedProperty, value);
+    }
+
+    public static readonly DependencyProperty IsCompactProperty =
+        DependencyProperty.Register(nameof(IsCompact), typeof(bool), typeof(MixerChannelControl),
+            new PropertyMetadata(false));
+
+    public bool IsCompact
+    {
+        get => (bool)GetValue(IsCompactProperty);
+        set => SetValue(IsCompactProperty, value);
     }
     
     #region Channel Selection
@@ -96,6 +126,51 @@ public partial class MixerChannelControl : UserControl
             e.Handled = true;
         }
     }
+
+    /// <summary>
+    /// Right-click on the OUT socket: removes this channel from the master bus
+    /// by clearing all SendTargets, so it no longer routes to any channel.
+    /// </summary>
+    private void OutSocket_RightClick(object sender, MouseButtonEventArgs e)
+    {
+        var mainVm = FindMainViewModel();
+        if (mainVm == null) return;
+
+        if (DataContext is not Track track) return;
+
+        var mixerChannel = mainVm.MixerChannels.FirstOrDefault(mc => mc.SourceTrack == track);
+        if (mixerChannel == null) return;
+
+        if (mixerChannel.SendTargets.Count == 0)
+        {
+            mainVm.StatusMessage = $"ℹ {mixerChannel.Name} ist bereits direkt am Master";
+            e.Handled = true;
+            return;
+        }
+
+        mixerChannel.SendTargets.Clear();
+        mainVm.StatusMessage = $"🔌 {mixerChannel.Name} → Master (alle Sends entfernt)";
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Right-click on solo: if multiple tracks are soloed, unsolo all.
+    /// </summary>
+    private void Solo_RightClick(object sender, MouseButtonEventArgs e)
+    {
+        var mainVm = FindMainViewModel();
+        if (mainVm == null) return;
+
+        var soloedTracks = mainVm.Tracks.Where(t => t.IsSolo).ToList();
+        if (soloedTracks.Count > 1)
+        {
+            foreach (var track in soloedTracks)
+                track.IsSolo = false;
+            mainVm.StatusMessage = "✓ Alle Tracks unsolo";
+            e.Handled = true;
+        }
+    }
     
     #endregion
 }
+

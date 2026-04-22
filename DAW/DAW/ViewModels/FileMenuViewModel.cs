@@ -57,6 +57,7 @@ public class FileMenuViewModel : INotifyPropertyChanged
     public ICommand SaveAsProjectCommand => SaveProjectAsCommand; // Alias für Kompatibilität
     public ICommand OpenRecentCommand { get; private set; } = null!;
     public ICommand ExitCommand { get; private set; } = null!;
+    public ICommand ExportCommand { get; private set; } = null!;
     
     #endregion
 
@@ -68,6 +69,7 @@ public class FileMenuViewModel : INotifyPropertyChanged
         SaveProjectAsCommand = new AsyncRelayCommand(ExecuteSaveAsProjectAsync);
         OpenRecentCommand = new AsyncRelayCommand<RecentProject>(ExecuteOpenRecentAsync);
         ExitCommand = new AsyncRelayCommand(ExecuteExitAsync);
+        ExportCommand = _mainViewModel.ExportCommand;
     }
 
     private async Task ExecuteNewProjectAsync()
@@ -189,6 +191,18 @@ public class FileMenuViewModel : INotifyPropertyChanged
                 Command = SaveProjectAsCommand,
                 Icon = "💾",
                 InputGestureText = "Ctrl+Shift+S"
+            }));
+
+            // Separator
+            FileMenuItems.Add(new MenuItemViewModel(new MenuItemModel { IsSeparator = true }));
+
+            // Export
+            FileMenuItems.Add(new MenuItemViewModel(new MenuItemModel
+            {
+                Header = "Exportieren...",
+                Command = ExportCommand,
+                Icon = "🎵",
+                InputGestureText = "Ctrl+Shift+E"
             }));
 
             // Separator
