@@ -325,6 +325,58 @@ public sealed class EnhancedProjectService
             project.Tracks.Add(projectTrack);
         }
 
+        // ── Export patterns (Channel Rack + Piano Roll) ───────────────────
+        project.Patterns.Clear();
+        project.ActivePatternName = mainViewModel.PatternVm.ActivePattern?.Name;
+
+        foreach (var pattern in mainViewModel.PatternVm.AllPatterns)
+        {
+            var pp = new ProjectPattern
+            {
+                Name      = pattern.Name,
+                StepCount = pattern.StepCount,
+                Swing     = pattern.Swing
+            };
+
+            foreach (var ch in pattern.Channels)
+            {
+                var pc = new ProjectPatternChannel
+                {
+                    Name         = ch.Name,
+                    SamplePath   = ch.SamplePath,
+                    PluginIcon   = ch.PluginIcon,
+                    ChannelColor = ch.ChannelColor.ToString(),
+                    IsMuted      = ch.IsMuted,
+                    MixerTrack   = ch.MixerTrack,
+                    Volume       = ch.Volume,
+                    Steps        = ch.Steps.Select(s => new ProjectStep
+                    {
+                        IsActive = s.IsActive,
+                        Velocity = s.Velocity,
+                        Pan      = s.Pan,
+                        Pitch    = s.Pitch
+                    }).ToList(),
+                    PianoRollNotes = ch.PianoRollNotes.Select(n => new ProjectPianoRollNote
+                    {
+                        Pitch     = n.Pitch,
+                        StartTick = n.StartTick,
+                        Length    = n.Length,
+                        Velocity  = n.Velocity,
+                        Pan       = n.Pan,
+                        Release   = n.Release,
+                        IsMuted   = n.IsMuted
+                    }).ToList()
+                };
+
+                if (!string.IsNullOrEmpty(ch.SamplePath))
+                    AddFileReference(project, ch.SamplePath);
+
+                pp.Channels.Add(pc);
+            }
+
+            project.Patterns.Add(pp);
+        }
+
         return project;
     }
     
@@ -657,6 +709,86 @@ public sealed class EnhancedProjectService
                 int current = mainViewModel.MixerChannels.IndexOf(ordered[i]);
                 if (current != i && current >= 0)
                     mainViewModel.MixerChannels.Move(current, i);
+            }
+        }
+
+        // ── Import patterns (Channel Rack + Piano Roll) ───────────────────
+        if (project.Patterns.Count > 0)
+        {
+            var patternVm = mainViewModel.PatternVm;
+
+            // Remove all existing patterns
+            patternVm.AllPatterns.Clear();
+
+            foreach (var pp in project.Patterns)
+            {
+                var model = new DAW.Models.Sequencer.PatternModel
+                {
+                    Name      = pp.Name,
+                    StepCount = pp.StepCount,
+                    Swing     = pp.Swing
+                };
+
+                foreach (var pc in pp.Channels)
+                {
+                    // Parse the stored color; fall back to DodgerBlue on failure
+                    System.Windows.Media.Color channelColor;
+                    try { channelColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(pc.ChannelColor); }
+                    catch { channelColor = System.Windows.Media.Colors.DodgerBlue; }
+
+                    var ch = new DAW.Models.Sequencer.ChannelModel(pc.Name, pp.StepCount)
+                    {
+                        SamplePath   = pc.SamplePath,
+                        PluginIcon   = pc.PluginIcon,
+                        ChannelColor = channelColor,
+                        IsMuted      = pc.IsMuted,
+                        MixerTrack   = pc.MixerTrack,
+                        Volume       = pc.Volume
+                    };
+
+                    // Restore steps
+                    for (int i = 0; i < pc.Steps.Count && i < ch.Steps.Count; i++)
+                    {
+                        ch.Steps[i].IsActive = pc.Steps[i].IsActive;
+                        ch.Steps[i].Velocity = pc.Steps[i].Velocity;
+                        ch.Steps[i].Pan      = pc.Steps[i].Pan;
+                        ch.Steps[i].Pitch    = pc.Steps[i].Pitch;
+                    }
+
+                    // Restore Piano Roll notes
+                    foreach (var pn in pc.PianoRollNotes)
+                    {
+                        ch.PianoRollNotes.Add(new DAW.Models.PianoRoll.PianoRollNote
+                        {
+                            Pitch     = pn.Pitch,
+                            StartTick = pn.StartTick,
+                            Length    = pn.Length,
+                            Velocity  = pn.Velocity,
+                            Pan       = pn.Pan,
+                            Release   = pn.Release,
+                            IsMuted   = pn.IsMuted
+                        });
+                    }
+
+                    model.Channels.Add(ch);
+                }
+
+                patternVm.AllPatterns.Add(model);
+            }
+
+            // Restore the active pattern
+            var active = string.IsNullOrEmpty(project.ActivePatternName)
+                ? patternVm.AllPatterns.FirstOrDefault()
+                : patternVm.AllPatterns.FirstOrDefault(p => p.Name == project.ActivePatternName)
+                  ?? patternVm.AllPatterns.FirstOrDefault();
+
+            patternVm.ActivePattern = active;
+
+            // Preload audio for all restored channels
+            foreach (var ch in patternVm.Channels)
+            {
+                ch.AudioEngine = mainViewModel.MixEngine;
+                _ = ch.PreloadSampleAsync();
             }
         }
     }

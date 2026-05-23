@@ -10,12 +10,14 @@ public static class EffectFactory
     /// </summary>
     public static readonly (string Type, string Name, string Icon)[] AvailableEffects =
     [
-        ("Equalizer",   "3-Band EQ",   "📊"),
-        ("Compressor",  "Compressor",  "📉"),
-        ("Reverb",      "Reverb",      "🏛️"),
-        ("Delay",       "Delay",       "🔁"),
-        ("Gain",        "Gain",        "🔊"),
-        ("Saturation",  "Saturation",  "🔥"),
+        ("Equalizer",   "3-Band EQ",        "📊"),
+        ("Compressor",  "Compressor",        "📉"),
+        ("Reverb",      "Reverb",             "🏛️"),
+        ("Delay",       "Delay",              "🔁"),
+        ("Gain",        "Gain",               "🔊"),
+        ("Saturation",  "Saturation",         "🔥"),
+        ("Spectre",     "Spectre Saturator",  "✨"),
+        ("Master",      "Dragon Particle",     "🐉"),
     ];
 
     /// <summary>
@@ -31,6 +33,8 @@ public static class EffectFactory
             "Delay"      => new DelayEffect(),
             "Gain"       => new GainEffect(),
             "Saturation" => new SaturationEffect(),
+            "Spectre"    => new SpectreEffect(),
+            "Master"     => new MasterEffect(),
             _ => null
         };
     }

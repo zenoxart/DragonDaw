@@ -86,11 +86,29 @@
                            Foreground="{DynamicResource AccentLightBrush}" 
                            FontWeight="Bold"
                            FontSize="12"/>
+                <!-- Current path -->
                 <TextBlock Text="{Binding CurrentPath}" 
                            Foreground="{DynamicResource TextSecondary}"
                            FontSize="10"
                            Margin="0,2,0,0"
                            TextTrimming="CharacterEllipsis"/>
+                <!--
+                    Default-path row: visible only when a path is set in
+                    Einstellungen → Allgemein → Audio-Browser Pfad.
+                    Shows a 📌 pin and the full path; clicking the path navigates there.
+                -->
+                <StackPanel Orientation="Horizontal" Margin="0,2,0,0"
+                            Visibility="{Binding HasDefaultPath, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="📌" FontSize="9" Margin="0,0,3,0" VerticalAlignment="Center"
+                               Foreground="{DynamicResource AccentBrush}"/>
+                    <TextBlock Text="{Binding DefaultPath}"
+                               Foreground="{DynamicResource AccentBrush}"
+                               FontSize="9" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTip="{Binding DefaultPath}"
+                               Cursor="Hand"
+                               MouseLeftButtonUp="DefaultPathLabel_Click"/>
+                </StackPanel>
             </StackPanel>
         </Border>
         
@@ -102,13 +120,25 @@
                 Padding="4">
             <StackPanel Orientation="Horizontal">
                 <Button Content="◀" Style="{StaticResource NavButton}" 
-                        Command="{Binding GoBackCommand}" ToolTip="Back"/>
+                        Command="{Binding GoBackCommand}" ToolTip="Zurück"/>
                 <Button Content="▶" Style="{StaticResource NavButton}" 
-                        Command="{Binding GoForwardCommand}" ToolTip="Forward"/>
-                <Button Content="🏠" Style="{StaticResource NavButton}" 
-                        Command="{Binding GoToMusicFolderCommand}" ToolTip="Music Folder"/>
+                        Command="{Binding GoForwardCommand}" ToolTip="Vor"/>
+                <Button Content="🎵" Style="{StaticResource NavButton}" 
+                        Command="{Binding GoToMusicFolderCommand}" ToolTip="Musik-Ordner"/>
                 <Button Content="💾" Style="{StaticResource NavButton}" 
                         Command="{Binding GoToDesktopCommand}" ToolTip="Desktop"/>
+                <!--
+                    Default-path button (📌): only shown when a path is configured
+                    in Einstellungen → Allgemein → Audio-Browser Pfad.
+                    One click jumps directly to that folder.
+                -->
+                <Button Content="📌"
+                        Style="{StaticResource NavButton}"
+                        Command="{Binding GoToDefaultPathCommand}"
+                        ToolTip="{Binding DefaultPath, StringFormat=Standard-Pfad: {0}}"
+                        Visibility="{Binding HasDefaultPath, Converter={StaticResource BoolToVis}}"
+                        Foreground="{DynamicResource AccentLightBrush}"
+                        FontSize="12"/>
             </StackPanel>
         </Border>
         

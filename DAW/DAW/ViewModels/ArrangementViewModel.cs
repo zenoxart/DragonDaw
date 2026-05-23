@@ -8,33 +8,8 @@ using DAW.Models;
 
 namespace DAW.ViewModels;
 
-/// <summary>
-/// Main ViewModel for the FL Studio-style Arrangement / Playlist view.
-///
-/// ── Beat-to-Pixel Mapping ──────────────────────────────────────────────────
-///
-///   BasePixelsPerBeat = 80 px   (at ZoomLevel 1.0)
-///   PixelsPerBeat     = BasePixelsPerBeat × ZoomLevel
-///
-///   Canvas-absolute coordinates (ScrollViewer handles viewport offset):
-///     PixelLeft  = StartBeat    × PixelsPerBeat   →  clip left edge
-///     PixelWidth = LengthInBeats × PixelsPerBeat  →  clip width
-///     BeatToPixel(beat) = beat × PixelsPerBeat
-///     PixelToBeat(px)   = px   / PixelsPerBeat
-///
-///   Snap grid:
-///     SnapToBeat(beat) = Round(beat / SnapResolution) × SnapResolution
-///     1.0 = quarter-note  |  0.5 = eighth-note  |  0.25 = sixteenth-note
-///
-/// ── Rendering Strategy ────────────────────────────────────────────────────
-///   Background grid  → TimelineGridControl (single DrawingContext pass)
-///   Ruler            → RulerControl        (single DrawingContext pass)
-///   Clips            → ItemsControl with Canvas panel; virtualized rows
-///   Playhead         → Canvas-overlaid Rectangle bound to PlayheadPixel
-/// </summary>
 public sealed class ArrangementViewModel : INotifyPropertyChanged
 {
-    // ── Layout constants ───────────────────────────────────────────────────────
     public const double BasePixelsPerBeat  = 80.0;
     public const double DefaultTrackHeight = 52.0;
     public const double MinTrackHeight     = 16.0;
@@ -45,7 +20,6 @@ public sealed class ArrangementViewModel : INotifyPropertyChanged
     private const double MaxZoom   = 8.0;
     private const int    TotalBars = 256;
 
-    // ── Private state ──────────────────────────────────────────────────────────
     private readonly MainViewModel _mainVm;
     private double _zoomLevel      = 1.0;
     private double _trackHeight    = DefaultTrackHeight;
@@ -67,42 +41,55 @@ public sealed class ArrangementViewModel : INotifyPropertyChanged
         {
             if (e.PropertyName == nameof(MainViewModel.BPM))
                 OnPropertyChanged(nameof(BPM));
+            if (e.PropertyName == nameof(MainViewModel.IsPatternBrowserVisible))
+                OnPropertyChanged(nameof(IsPatternBrowserVisible));
         };
 
-        ZoomInCommand  = new RelayCommand(() => ZoomLevel = Math.Min(MaxZoom, ZoomLevel * 1.25));
-        ZoomOutCommand = new RelayCommand(() => ZoomLevel = Math.Max(MinZoom, ZoomLevel / 1.25));
-        ZoomResetCommand = new RelayCommand(() => ZoomLevel = 1.0);
+        // Forward the toggle command from MainViewModel
+        TogglePatternBrowserCommand = _mainVm.TogglePatternBrowserCommand;
 
-        SnapOffCommand           = new RelayCommand(() => SnapResolution = 0.0);
-        SnapQuarterCommand       = new RelayCommand(() => SnapResolution = 1.0);
-        SnapEighthCommand        = new RelayCommand(() => SnapResolution = 0.5);
-        SnapSixteenthCommand     = new RelayCommand(() => SnapResolution = 0.25);
-        AddEmptyTrackCommand     = new RelayCommand(() => AddEmptyTrack());
-        ResetTrackHeightCommand  = new RelayCommand(() => CurrentTrackHeight = DefaultTrackHeight);
+        ZoomInCommand           = new RelayCommand(() => ZoomLevel = Math.Min(MaxZoom, ZoomLevel * 1.25));
+        ZoomOutCommand          = new RelayCommand(() => ZoomLevel = Math.Max(MinZoom, ZoomLevel / 1.25));
+        ZoomResetCommand        = new RelayCommand(() => ZoomLevel = 1.0);
+        SnapOffCommand          = new RelayCommand(() => SnapResolution = 0.0);
+        SnapQuarterCommand      = new RelayCommand(() => SnapResolution = 1.0);
+        SnapEighthCommand       = new RelayCommand(() => SnapResolution = 0.5);
+        SnapSixteenthCommand    = new RelayCommand(() => SnapResolution = 0.25);
+        AddEmptyTrackCommand    = new RelayCommand(AddEmptyTrack);
+        ResetTrackHeightCommand = new RelayCommand(() => CurrentTrackHeight = DefaultTrackHeight);
+    }
+
+    // ── Pattern browser visibility (forwarded from MainViewModel) ──────────────
+
+    /// <summary>
+    /// Whether the Patterns &amp; Channels sidebar is visible.
+    /// Bound to the panel Visibility in ArrangementView.xaml.
+    /// Toggled by the collapse button in the panel header and by View menu.
+    /// </summary>
+    public bool IsPatternBrowserVisible => _mainVm.IsPatternBrowserVisible;
+
+    /// <summary>Command to toggle the pattern browser panel.</summary>
+    public ICommand TogglePatternBrowserCommand { get; }
+
+    // ── Sub-VMs ────────────────────────────────────────────────────────────────
+
+    public ViewModels.Sequencer.PatternViewModel PatternVm => _mainVm.PatternVm;
+
+    public void AddTrackFromChannel(ViewModels.Sequencer.ChannelViewModel ch)
+    {
+        _mainVm.AddEmptyTrack();
+        var t = _mainVm.Tracks.LastOrDefault(); if (t != null) t.Title = ch.Name;
     }
 
     // ── Track collection ───────────────────────────────────────────────────────
     public ObservableCollection<ArrangementTrackViewModel> Tracks { get; }
 
-    // ── Beat-to-Pixel mapping ──────────────────────────────────────────────────
-
-    /// <summary>Pixels per beat at the current zoom level.</summary>
-    public double PixelsPerBeat => BasePixelsPerBeat * ZoomLevel;
-
-    /// <summary>Converts a beat position to a canvas-absolute pixel X coordinate with pixel snapping.</summary>
-    public double BeatToPixel(double beat) => Math.Round(beat * PixelsPerBeat);
-
-    /// <summary>Converts a canvas-absolute pixel X coordinate to a beat position.</summary>
+    // ── Beat-to-pixel ──────────────────────────────────────────────────────────
+    public double PixelsPerBeat   => BasePixelsPerBeat * ZoomLevel;
+    public double BeatToPixel(double beat)  => Math.Round(beat * PixelsPerBeat);
     public double PixelToBeat(double pixel) => pixel / PixelsPerBeat;
-
-    /// <summary>Converts a beat count to a pixel width with pixel snapping.</summary>
-    public double BeatsToPixels(double beats) => Math.Round(beats * PixelsPerBeat);
-
-    /// <summary>Snaps a beat value to the nearest snap-grid point. Returns unmodified beat when snap is off.</summary>
-    public double SnapToBeat(double beat) =>
-        SnapResolution > 0
-            ? Math.Round(beat / SnapResolution) * SnapResolution
-            : beat;
+    public double BeatsToPixels(double b)   => Math.Round(b * PixelsPerBeat);
+    public double SnapToBeat(double beat)   => SnapResolution > 0 ? Math.Round(beat / SnapResolution) * SnapResolution : beat;
 
     // ── Zoom ───────────────────────────────────────────────────────────────────
     public double ZoomLevel
@@ -118,7 +105,6 @@ public sealed class ArrangementViewModel : INotifyPropertyChanged
             NotifyAllClipPixelsChanged();
         }
     }
-
     public string ZoomDisplay => $"{ZoomLevel * 100:F0}%";
 
     // ── Snap ───────────────────────────────────────────────────────────────────
@@ -128,212 +114,96 @@ public sealed class ArrangementViewModel : INotifyPropertyChanged
         set
         {
             if (!SetField(ref _snapResolution, value)) return;
-            OnPropertyChanged(nameof(SnapDisplay));
-            OnPropertyChanged(nameof(IsSnapOff));
-            OnPropertyChanged(nameof(IsSnapQuarter));
-            OnPropertyChanged(nameof(IsSnapEighth));
-            OnPropertyChanged(nameof(IsSnapSixteenth));
-            OnPropertyChanged(nameof(SnapSelectedIndex));
+            OnPropertyChanged(nameof(SnapDisplay)); OnPropertyChanged(nameof(IsSnapOff));
+            OnPropertyChanged(nameof(IsSnapQuarter)); OnPropertyChanged(nameof(IsSnapEighth));
+            OnPropertyChanged(nameof(IsSnapSixteenth)); OnPropertyChanged(nameof(SnapSelectedIndex));
         }
     }
-
-    public string SnapDisplay => _snapResolution switch
-    {
-        0.0 => "OFF",
-        1.0 => "1/4",
-        0.5 => "1/8",
-        0.25 => "1/16",
-        _ => $"{_snapResolution:F2}"
-    };
-
-    public bool IsSnapOff => _snapResolution == 0.0;
-    public bool IsSnapQuarter => _snapResolution == 1.0;
-    public bool IsSnapEighth => _snapResolution == 0.5;
+    public string SnapDisplay  => _snapResolution switch { 0.0 => "OFF", 1.0 => "1/4", 0.5 => "1/8", 0.25 => "1/16", _ => $"{_snapResolution:F2}" };
+    public bool IsSnapOff       => _snapResolution == 0.0;
+    public bool IsSnapQuarter   => _snapResolution == 1.0;
+    public bool IsSnapEighth    => _snapResolution == 0.5;
     public bool IsSnapSixteenth => _snapResolution == 0.25;
 
-    /// <summary>ComboBox-friendly index: 0=OFF, 1=1/4, 2=1/8, 3=1/16, 4=1/32.</summary>
     public int SnapSelectedIndex
     {
-        get => _snapResolution switch
-        {
-            0.0  => 0,
-            1.0  => 1,
-            0.5  => 2,
-            0.25 => 3,
-            0.125 => 4,
-            _ => 1
-        };
-        set
-        {
-            SnapResolution = value switch
-            {
-                0 => 0.0,
-                1 => 1.0,
-                2 => 0.5,
-                3 => 0.25,
-                4 => 0.125,
-                _ => 1.0
-            };
-            OnPropertyChanged(nameof(SnapSelectedIndex));
-        }
+        get => _snapResolution switch { 0.0 => 0, 1.0 => 1, 0.5 => 2, 0.25 => 3, 0.125 => 4, _ => 1 };
+        set { SnapResolution = value switch { 0 => 0.0, 1 => 1.0, 2 => 0.5, 3 => 0.25, 4 => 0.125, _ => 1.0 }; OnPropertyChanged(nameof(SnapSelectedIndex)); }
     }
 
     // ── Playhead ───────────────────────────────────────────────────────────────
     public double PlayheadBeat
     {
         get => _playheadBeat;
-        set
-        {
-            if (!SetField(ref _playheadBeat, Math.Max(0, value))) return;
-            OnPropertyChanged(nameof(PlayheadPixel));
-        }
+        set { if (!SetField(ref _playheadBeat, Math.Max(0, value))) return; OnPropertyChanged(nameof(PlayheadPixel)); }
     }
-
-    /// <summary>Canvas-absolute pixel position of the playhead needle with pixel snapping.</summary>
     public double PlayheadPixel => Math.Round(BeatToPixel(PlayheadBeat));
 
-    // ── Vertical zoom (track height) ─────────────────────────────────────────
-
-    /// <summary>Current track lane height in pixels. Adjustable via vertical zoom.</summary>
+    // ── Track height ──────────────────────────────────────────────────────────
     public double CurrentTrackHeight
     {
         get => _trackHeight;
-        set
-        {
-            if (!SetField(ref _trackHeight, Math.Clamp(value, MinTrackHeight, MaxTrackHeight))) return;
-            OnPropertyChanged(nameof(ClipHeight));
-            OnPropertyChanged(nameof(TotalTimelineHeight));
-        }
+        set { if (!SetField(ref _trackHeight, Math.Clamp(value, MinTrackHeight, MaxTrackHeight))) return; OnPropertyChanged(nameof(ClipHeight)); OnPropertyChanged(nameof(TotalTimelineHeight)); }
     }
-
-    /// <summary>Height of a clip inside a track lane (4 px less than lane for padding).</summary>
     public double ClipHeight => Math.Max(8, CurrentTrackHeight - 4);
 
     // ── Layout ─────────────────────────────────────────────────────────────────
-
-    /// <summary>Total width of the timeline canvas in pixels.</summary>
-    public double TotalTimelineWidth => TotalBars * BeatsPerBar * PixelsPerBeat;
-
-    /// <summary>Total height of the timeline canvas in pixels.</summary>
+    public double TotalTimelineWidth  => TotalBars * BeatsPerBar * PixelsPerBeat;
     public double TotalTimelineHeight => Math.Max(Tracks.Count * CurrentTrackHeight, CurrentTrackHeight);
-
-    public double BPM => _mainVm.BPM;
+    public double BPM                 => _mainVm.BPM;
 
     // ── Selection ──────────────────────────────────────────────────────────────
     public ArrangementClipViewModel? SelectedClip
     {
         get => _selectedClip;
-        set
-        {
-            if (_selectedClip != null) _selectedClip.Model.IsSelected = false;
-            SetField(ref _selectedClip, value);
-            if (_selectedClip != null) _selectedClip.Model.IsSelected = true;
-        }
+        set { if (_selectedClip != null) _selectedClip.Model.IsSelected = false; SetField(ref _selectedClip, value); if (_selectedClip != null) _selectedClip.Model.IsSelected = true; }
     }
 
     public ArrangementTrackViewModel? SelectedTrack
     {
         get => _selectedTrack;
-        set
-        {
-            // Single-select: clear all, select one
-            ClearTrackSelection();
-            SetField(ref _selectedTrack, value);
-            if (_selectedTrack != null) _selectedTrack.IsSelected = true;
-        }
+        set { ClearTrackSelection(); SetField(ref _selectedTrack, value); if (_selectedTrack != null) _selectedTrack.IsSelected = true; }
     }
 
-    /// <summary>Selects a track. If <paramref name="addToSelection"/> is true (Ctrl+Click), toggles without clearing.</summary>
     public void SelectTrack(ArrangementTrackViewModel track, bool addToSelection)
     {
         if (addToSelection)
         {
             track.IsSelected = !track.IsSelected;
-            // Update _selectedTrack to the last toggled-on track
-            if (track.IsSelected)
-                SetField(ref _selectedTrack, track);
-            else if (_selectedTrack == track)
-                SetField(ref _selectedTrack, Tracks.FirstOrDefault(t => t.IsSelected));
+            if (track.IsSelected) SetField(ref _selectedTrack, track);
+            else if (_selectedTrack == track) SetField(ref _selectedTrack, Tracks.FirstOrDefault(t => t.IsSelected));
         }
-        else
-        {
-            SelectedTrack = track; // single-select path
-        }
+        else SelectedTrack = track;
     }
 
-    /// <summary>Returns all currently selected tracks.</summary>
-    public IEnumerable<ArrangementTrackViewModel> GetSelectedTracks() =>
-        Tracks.Where(t => t.IsSelected);
-
-    private void ClearTrackSelection()
-    {
-        foreach (var t in Tracks)
-            t.IsSelected = false;
-    }
+    public IEnumerable<ArrangementTrackViewModel> GetSelectedTracks() => Tracks.Where(t => t.IsSelected);
+    private void ClearTrackSelection() { foreach (var t in Tracks) t.IsSelected = false; }
 
     // ── Commands ───────────────────────────────────────────────────────────────
-    public ICommand ZoomInCommand      { get; }
-    public ICommand ZoomOutCommand     { get; }
-    public ICommand ZoomResetCommand   { get; }
-    public ICommand SnapOffCommand        { get; }
-    public ICommand SnapQuarterCommand   { get; }
-    public ICommand SnapEighthCommand    { get; }
-    public ICommand SnapSixteenthCommand { get; }
-    public ICommand AddEmptyTrackCommand     { get; }
-    public ICommand ResetTrackHeightCommand  { get; }
+    public ICommand ZoomInCommand           { get; }
+    public ICommand ZoomOutCommand          { get; }
+    public ICommand ZoomResetCommand        { get; }
+    public ICommand SnapOffCommand          { get; }
+    public ICommand SnapQuarterCommand      { get; }
+    public ICommand SnapEighthCommand       { get; }
+    public ICommand SnapSixteenthCommand    { get; }
+    public ICommand AddEmptyTrackCommand    { get; }
+    public ICommand ResetTrackHeightCommand { get; }
 
     // ── Internal ───────────────────────────────────────────────────────────────
-
     private void OnMainTracksChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        if (e.NewItems != null)
-            foreach (Track t in e.NewItems)
-                Tracks.Add(new ArrangementTrackViewModel(t, this));
-
-        if (e.OldItems != null)
-            foreach (Track t in e.OldItems)
-            {
-                var vm = Tracks.FirstOrDefault(tv => tv.Model == t);
-                if (vm != null) Tracks.Remove(vm);
-            }
-
+        if (e.NewItems != null) foreach (Track t in e.NewItems) Tracks.Add(new ArrangementTrackViewModel(t, this));
+        if (e.OldItems != null) foreach (Track t in e.OldItems) { var vm = Tracks.FirstOrDefault(tv => tv.Model == t); if (vm != null) Tracks.Remove(vm); }
         OnPropertyChanged(nameof(TotalTimelineHeight));
     }
 
-    /// <summary>
-    /// Removes a track from the arrangement.
-    /// </summary>
-    public void RemoveTrack(ArrangementTrackViewModel trackVm)
-    {
-        var track = trackVm.Model;
-        _mainVm.Tracks.Remove(track); // This will trigger OnMainTracksChanged
-    }
+    public void RemoveTrack(ArrangementTrackViewModel trackVm) => _mainVm.Tracks.Remove(trackVm.Model);
+    private void AddEmptyTrack()  => _mainVm.AddEmptyTrack();
+    private void NotifyAllClipPixelsChanged() { foreach (var t in Tracks) t.NotifyClipPixelsChanged(); }
 
-    /// <summary>
-    /// Adds a new empty track to the arrangement.
-    /// </summary>
-    private void AddEmptyTrack()
-    {
-        _mainVm.AddEmptyTrack();
-    }
-
-    private void NotifyAllClipPixelsChanged()
-    {
-        foreach (var track in Tracks)
-            track.NotifyClipPixelsChanged();
-    }
-
-    // ── INotifyPropertyChanged ─────────────────────────────────────────────────
+    // ── INotifyPropertyChanged ────────────────────────────────────────────────
     public event PropertyChangedEventHandler? PropertyChanged;
-
-    private bool SetField<T>(ref T field, T value, [CallerMemberName] string? name = null)
-    {
-        if (EqualityComparer<T>.Default.Equals(field, value)) return false;
-        field = value;
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
-        return true;
-    }
-
-    private void OnPropertyChanged([CallerMemberName] string? name = null) =>
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    private bool SetField<T>(ref T f, T v, [CallerMemberName] string? n = null) { if (EqualityComparer<T>.Default.Equals(f, v)) return false; f = v; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n)); return true; }
+    private void OnPropertyChanged([CallerMemberName] string? n = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
 }

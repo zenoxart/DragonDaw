@@ -74,6 +74,64 @@ public sealed class DawProject
     /// Referenced audio files used in this project
     /// </summary>
     public List<ProjectFileReference> Files { get; set; } = [];
+
+    /// <summary>
+    /// All patterns (Channel Rack + Piano Roll data) in the project.
+    /// </summary>
+    public List<ProjectPattern> Patterns { get; set; } = [];
+
+    /// <summary>
+    /// Name of the pattern that was active when the project was saved.
+    /// </summary>
+    public string? ActivePatternName { get; set; }
+}
+
+/// <summary>Serialized form of a Pattern (Channel Rack row data + Piano Roll notes).</summary>
+public sealed class ProjectPattern
+{
+    public string Name      { get; set; } = "Pattern 1";
+    public int    StepCount { get; set; } = 16;
+    public double Swing     { get; set; } = 0.0;
+    public List<ProjectPatternChannel> Channels { get; set; } = [];
+}
+
+/// <summary>Serialized form of one channel inside a pattern.</summary>
+public sealed class ProjectPatternChannel
+{
+    public string Name         { get; set; } = "Channel";
+    public string SamplePath   { get; set; } = string.Empty;
+    public string PluginIcon   { get; set; } = "🎹";
+    public string ChannelColor { get; set; } = "#1E61A0";
+    public bool   IsMuted      { get; set; } = false;
+    public int    MixerTrack   { get; set; } = 0;
+    public float  Volume       { get; set; } = 1.0f;
+
+    /// <summary>Step-grid data (IsActive + Velocity per step).</summary>
+    public List<ProjectStep> Steps { get; set; } = [];
+
+    /// <summary>Piano Roll notes for this channel.</summary>
+    public List<ProjectPianoRollNote> PianoRollNotes { get; set; } = [];
+}
+
+/// <summary>Serialized form of a single step-sequencer step.</summary>
+public sealed class ProjectStep
+{
+    public bool  IsActive { get; set; }
+    public float Velocity { get; set; } = 1.0f;
+    public float Pan      { get; set; } = 0.0f;
+    public float Pitch    { get; set; } = 0.0f;
+}
+
+/// <summary>Serialized form of a Piano Roll note.</summary>
+public sealed class ProjectPianoRollNote
+{
+    public int   Pitch     { get; set; } = 60;
+    public int   StartTick { get; set; } = 0;
+    public int   Length    { get; set; } = 96;
+    public float Velocity  { get; set; } = 0.8f;
+    public float Pan       { get; set; } = 0.0f;
+    public float Release   { get; set; } = 0.5f;
+    public bool  IsMuted   { get; set; } = false;
 }
 
 /// <summary>

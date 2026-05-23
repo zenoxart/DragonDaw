@@ -43,7 +43,6 @@ public class CompressorEffect : AudioEffect
     private volatile float _grSmooth;
     private volatile float _inSmooth = -100f;
     private volatile float _outSmooth = -100f;
-    private int _meterSkipCounter;
 
     /// <summary>1176-style selectable ratios.</summary>
     public static readonly double[] PresetRatios = [4, 8, 12, 20];
@@ -219,25 +218,18 @@ public class CompressorEffect : AudioEffect
 
         _envelope = env;
 
-        // Update metering (smoothed, only notify UI every ~4 buffers)
-        const float fall = 0.92f;
+        // Update metering smoothed values (volatile writes, no PropertyChanged from audio thread)
+        const float fall   = 0.92f;
         const float smooth = 0.85f;
 
         _grSmooth = (float)Math.Max(maxGr, _grSmooth * fall);
 
-        float inDb2 = peakIn > 1e-8f ? (float)(FastLog10(peakIn) * 20.0) : -100f;
+        float inDb2  = peakIn  > 1e-8f ? (float)(FastLog10(peakIn)  * 20.0) : -100f;
         float outDb2 = peakOut > 1e-8f ? (float)(FastLog10(peakOut) * 20.0) : -100f;
-        _inSmooth = inDb2 > _inSmooth ? inDb2 : _inSmooth * smooth + inDb2 * (1f - smooth);
+        _inSmooth  = inDb2  > _inSmooth  ? inDb2  : _inSmooth  * smooth + inDb2  * (1f - smooth);
         _outSmooth = outDb2 > _outSmooth ? outDb2 : _outSmooth * smooth + outDb2 * (1f - smooth);
-
-        // Throttle UI notifications to every ~4 buffers (~85ms at 512 samples/48kHz)
-        if (++_meterSkipCounter >= 4)
-        {
-            _meterSkipCounter = 0;
-            OnPropertyChanged(nameof(GainReduction));
-            OnPropertyChanged(nameof(InputLevel));
-            OnPropertyChanged(nameof(OutputLevel));
-        }
+        // UI reads GainReduction/InputLevel/OutputLevel directly as volatile fields.
+        // No PropertyChanged raised from the audio thread — the meter UI polls on a timer.
     }
 
     public override void Reset()

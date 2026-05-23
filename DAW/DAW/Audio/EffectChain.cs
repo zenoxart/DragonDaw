@@ -6,161 +6,123 @@ using DAW.Audio.Effects;
 namespace DAW.Audio;
 
 /// <summary>
-/// Thread-safe effect chain for audio processing.
-/// Uses copy-on-write pattern to avoid locks during audio processing.
+/// Thread-safe effect chain.
+///
+/// The audio thread reads <see cref="EffectsSnapshot"/> — a volatile array swapped
+/// atomically on every modification.  All mutation methods update both the internal
+/// list and the snapshot atomically under <see cref="_modifyLock"/>.
+///
+/// UI binds to <see cref="Effects"/> (ObservableCollection).  Updates to it are always
+/// posted to the UI thread via Dispatcher.BeginInvoke so the audio callback never blocks.
 /// </summary>
 public class EffectChain : INotifyPropertyChanged
 {
     private volatile bool _isBypassed;
     private volatile AudioEffect[] _effectsSnapshot = [];
+    private readonly List<AudioEffect> _effects = [];
     private readonly object _modifyLock = new();
 
-    public EffectChain()
-    {
-        Effects.CollectionChanged += (_, _) =>
-        {
-            UpdateSnapshot();
-            OnPropertyChanged(nameof(EffectCount));
-        };
-    }
-
-    /// <summary>
-    /// The ordered list of effects in this chain (for UI binding).
-    /// </summary>
     public ObservableCollection<AudioEffect> Effects { get; } = [];
 
-    /// <summary>
-    /// Thread-safe snapshot of effects for audio processing.
-    /// </summary>
     public AudioEffect[] EffectsSnapshot => _effectsSnapshot;
 
-    /// <summary>
-    /// Bypass the entire effect chain.
-    /// </summary>
     public bool IsBypassed
     {
         get => _isBypassed;
-        set
-        {
-            if (_isBypassed != value)
-            {
-                _isBypassed = value;
-                OnPropertyChanged();
-            }
-        }
+        set { if (_isBypassed != value) { _isBypassed = value; OnPropertyChanged(); } }
     }
 
-    /// <summary>
-    /// Number of effects in the chain.
-    /// </summary>
     public int EffectCount => _effectsSnapshot.Length;
 
-    /// <summary>
-    /// Total algorithmic latency of this chain in samples (sum of all enabled effects'
-    /// <see cref="AudioEffect.LatencySamples"/>).  Used by the routing engine for
-    /// Plugin Delay Compensation (PDC).
-    /// </summary>
     public int TotalLatencySamples
-        => _effectsSnapshot.Where(e => e.IsEnabled).Sum(e => e.LatencySamples);
+        => _effectsSnapshot.Sum(e => e.IsEnabled ? e.LatencySamples : 0);
 
-    private void UpdateSnapshot()
+    private void SwapSnapshot()
     {
-        lock (_modifyLock)
-        {
-            _effectsSnapshot = [.. Effects];
-        }
+        _effectsSnapshot = _effects.ToArray();
     }
 
-    /// <summary>
-    /// Adds an effect to the end of the chain.
-    /// </summary>
+    private static void OnUI(Action a)
+    {
+        var d = System.Windows.Application.Current?.Dispatcher;
+        if (d != null && !d.CheckAccess())
+            d.BeginInvoke(a, System.Windows.Threading.DispatcherPriority.Normal);
+        else
+            a();
+    }
+
     public void AddEffect(AudioEffect effect)
     {
         lock (_modifyLock)
         {
-            Effects.Add(effect);
+            _effects.Add(effect);
+            SwapSnapshot();
         }
+        OnUI(() => { Effects.Add(effect); OnPropertyChanged(nameof(EffectCount)); });
     }
 
-    /// <summary>
-    /// Inserts an effect at a specific position.
-    /// </summary>
     public void InsertEffect(int index, AudioEffect effect)
     {
+        int clamped;
         lock (_modifyLock)
         {
-            Effects.Insert(Math.Clamp(index, 0, Effects.Count), effect);
+            clamped = Math.Clamp(index, 0, _effects.Count);
+            _effects.Insert(clamped, effect);
+            SwapSnapshot();
         }
+        OnUI(() => { Effects.Insert(clamped, effect); OnPropertyChanged(nameof(EffectCount)); });
     }
 
-    /// <summary>
-    /// Removes an effect from the chain.
-    /// </summary>
     public bool RemoveEffect(AudioEffect effect)
     {
+        bool removed;
         lock (_modifyLock)
         {
-            return Effects.Remove(effect);
+            removed = _effects.Remove(effect);
+            if (removed) SwapSnapshot();
         }
+        if (removed)
+            OnUI(() => { Effects.Remove(effect); OnPropertyChanged(nameof(EffectCount)); });
+        return removed;
     }
 
-    /// <summary>
-    /// Moves an effect up in the chain (earlier in processing order).
-    /// </summary>
     public void MoveEffectUp(AudioEffect effect)
     {
         lock (_modifyLock)
         {
-            int index = Effects.IndexOf(effect);
-            if (index > 0)
-            {
-                Effects.Move(index, index - 1);
-            }
+            int idx = _effects.IndexOf(effect);
+            if (idx <= 0) return;
+            _effects.RemoveAt(idx); _effects.Insert(idx - 1, effect);
+            SwapSnapshot();
         }
+        OnUI(() => { int i = Effects.IndexOf(effect); if (i > 0) Effects.Move(i, i - 1); });
     }
 
-    /// <summary>
-    /// Moves an effect down in the chain (later in processing order).
-    /// </summary>
     public void MoveEffectDown(AudioEffect effect)
     {
         lock (_modifyLock)
         {
-            int index = Effects.IndexOf(effect);
-            if (index >= 0 && index < Effects.Count - 1)
-            {
-                Effects.Move(index, index + 1);
-            }
+            int idx = _effects.IndexOf(effect);
+            if (idx < 0 || idx >= _effects.Count - 1) return;
+            _effects.RemoveAt(idx); _effects.Insert(idx + 1, effect);
+            SwapSnapshot();
         }
+        OnUI(() => { int i = Effects.IndexOf(effect); if (i >= 0 && i < Effects.Count - 1) Effects.Move(i, i + 1); });
     }
 
-    /// <summary>
-    /// Resets all effects in the chain.
-    /// </summary>
     public void Reset()
     {
-        var snapshot = _effectsSnapshot;
-        foreach (var effect in snapshot)
-        {
-            try { effect.Reset(); } catch { }
-        }
+        var snap = _effectsSnapshot;
+        foreach (var e in snap) try { e.Reset(); } catch { }
     }
 
-    /// <summary>
-    /// Clears all effects from the chain.
-    /// </summary>
     public void Clear()
     {
-        lock (_modifyLock)
-        {
-            Effects.Clear();
-        }
+        lock (_modifyLock) { _effects.Clear(); SwapSnapshot(); }
+        OnUI(() => { Effects.Clear(); OnPropertyChanged(nameof(EffectCount)); });
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
-
-    protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
-    {
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-    }
+    protected virtual void OnPropertyChanged([CallerMemberName] string? name = null)
+        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }

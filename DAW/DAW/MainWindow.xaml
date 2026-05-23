@@ -11,6 +11,8 @@
     xmlns:browser="clr-namespace:DAW.Views.AudioBrowser"
     xmlns:controls="clr-namespace:DAW.Views.Controls"
     xmlns:converters="clr-namespace:DAW.Converters"
+    xmlns:seq="clr-namespace:DAW.Views.Sequencer"
+    xmlns:pianoroll="clr-namespace:DAW.Views.PianoRoll"
     mc:Ignorable="d"
     Title="Dragon DAW" Height="800" Width="1280"
     WindowStartupLocation="CenterScreen"
@@ -572,7 +574,8 @@
 
             <!-- Main Content Tabs -->
             <Border Grid.Column="2" Background="{DynamicResource DarkBg}">
-                <TabControl x:Name="MainTabControl" 
+                <TabControl x:Name="MainTabControl"
+                            SelectedIndex="{Binding ActiveTabIndex, Mode=TwoWay}"
                             Background="Transparent" 
                             BorderThickness="0"
                             Padding="0">
@@ -608,6 +611,16 @@
                     <!-- MIXER Tab -->
                     <TabItem Header="MIXER" Style="{StaticResource FLTab}">
                         <views:MixerView DataContext="{Binding}"/>
+                    </TabItem>
+
+                    <!-- CHANNEL RACK Tab -->
+                    <TabItem Header="CHANNEL RACK" Style="{StaticResource FLTab}">
+                        <seq:ChannelRackView DataContext="{Binding PatternVm}"/>
+                    </TabItem>
+
+                    <!-- PIANO ROLL Tab -->
+                    <TabItem Header="PIANO ROLL" Style="{StaticResource FLTab}">
+                        <pianoroll:PianoRollView DataContext="{Binding PianoRollVm}"/>
                     </TabItem>
                 </TabControl>
             </Border>

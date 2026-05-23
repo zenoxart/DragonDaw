@@ -134,6 +134,8 @@
                 <ColumnDefinition Width="Auto"/> <!-- Edit Tools -->
                 <ColumnDefinition Width="20"/>   <!-- Spacer -->
                 <ColumnDefinition Width="Auto"/> <!-- Toggles -->
+                <ColumnDefinition Width="16"/>   <!-- Spacer -->
+                <ColumnDefinition Width="Auto"/> <!-- BPM Control -->
                 <ColumnDefinition Width="*"/>    <!-- Flex space -->
             </Grid.ColumnDefinitions>
 
@@ -207,6 +209,185 @@
                               IsChecked="{Binding IsMetronomeEnabled, Mode=OneWay}" Command="{Binding ToggleMetronomeCommand}"
                               ToolTip="Metronom ein/aus"/>
             </StackPanel>
+
+            <!-- ── BPM Control ─────────────────────────────────────── -->
+            <Border Grid.Column="9"
+                    Background="#1A1E26"
+                    BorderBrush="#30363D"
+                    BorderThickness="1"
+                    CornerRadius="5"
+                    Padding="6,3"
+                    VerticalAlignment="Center"
+                    MouseWheel="BpmControl_MouseWheel"
+                    ToolTip="BPM — Scroll oder ±-Tasten, Shift für ±5, TAP für Tap Tempo">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+
+                    <!-- Label -->
+                    <TextBlock Text="BPM" Foreground="#5A6A7A" FontSize="8" FontWeight="Bold"
+                               VerticalAlignment="Center" Margin="0,0,5,0"/>
+
+                    <!-- Decrement large (Shift-click = −5) -->
+                    <Button x:Name="BpmDecLarge"
+                            Content="«" Width="18" Height="22" FontSize="9" FontWeight="Bold"
+                            Command="{Binding BpmDecrementLargeCommand}"
+                            Background="Transparent" BorderBrush="#30363D" BorderThickness="1"
+                            Foreground="#5A7A9A" Cursor="Hand"
+                            ToolTip="−5 BPM">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                        CornerRadius="3">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#2D3748"/>
+                                        <Setter TargetName="Bd" Property="BorderBrush" Value="#C41E3A"/>
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#1A202C"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+
+                    <!-- Decrement -->
+                    <Button x:Name="BpmDec"
+                            Content="‹" Width="18" Height="22" FontSize="11" FontWeight="Bold"
+                            Command="{Binding BpmDecrementCommand}"
+                            Background="Transparent" BorderBrush="#30363D" BorderThickness="1"
+                            Foreground="#7A9ABA" Cursor="Hand" Margin="1,0,0,0"
+                            ToolTip="−1 BPM">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                        CornerRadius="3">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#2D3748"/>
+                                        <Setter TargetName="Bd" Property="BorderBrush" Value="#C41E3A"/>
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#1A202C"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+
+                    <!-- BPM Value (editable TextBox) -->
+                    <Border Background="#0D1117" BorderBrush="#30363D" BorderThickness="1"
+                            CornerRadius="3" Margin="2,0" Padding="2,0">
+                        <TextBox x:Name="BpmTextBox"
+                                 Width="46" Height="22"
+                                 Text="{Binding BPM, StringFormat={}{0:F1}, UpdateSourceTrigger=LostFocus}"
+                                 Background="Transparent"
+                                 Foreground="#E8C84A"
+                                 BorderThickness="0"
+                                 FontSize="14" FontWeight="Bold"
+                                 FontFamily="Consolas"
+                                 TextAlignment="Center"
+                                 VerticalContentAlignment="Center"
+                                 CaretBrush="#E8C84A"
+                                 PreviewKeyDown="BpmTextBox_PreviewKeyDown"
+                                 LostFocus="BpmTextBox_LostFocus"
+                                 GotFocus="BpmTextBox_GotFocus"
+                                 ToolTip="BPM eingeben (Enter bestätigen, Esc abbrechen)"/>
+                    </Border>
+
+                    <!-- Increment -->
+                    <Button x:Name="BpmInc"
+                            Content="›" Width="18" Height="22" FontSize="11" FontWeight="Bold"
+                            Command="{Binding BpmIncrementCommand}"
+                            Background="Transparent" BorderBrush="#30363D" BorderThickness="1"
+                            Foreground="#7A9ABA" Cursor="Hand"
+                            ToolTip="+1 BPM">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                        CornerRadius="3">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#2D3748"/>
+                                        <Setter TargetName="Bd" Property="BorderBrush" Value="#C41E3A"/>
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#1A202C"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+
+                    <!-- Increment large -->
+                    <Button x:Name="BpmIncLarge"
+                            Content="»" Width="18" Height="22" FontSize="9" FontWeight="Bold"
+                            Command="{Binding BpmIncrementLargeCommand}"
+                            Background="Transparent" BorderBrush="#30363D" BorderThickness="1"
+                            Foreground="#5A7A9A" Cursor="Hand" Margin="1,0,0,0"
+                            ToolTip="+5 BPM">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                        CornerRadius="3">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#2D3748"/>
+                                        <Setter TargetName="Bd" Property="BorderBrush" Value="#C41E3A"/>
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#1A202C"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+
+                    <!-- Tap Tempo -->
+                    <Button x:Name="TapTempoBtn"
+                            Content="TAP" Width="34" Height="22" FontSize="8" FontWeight="Bold"
+                            Command="{Binding TapTempoCommand}"
+                            Background="#1E2840" BorderBrush="#2A4080" BorderThickness="1"
+                            Foreground="#7AAAF0" Cursor="Hand" Margin="4,0,0,0"
+                            ToolTip="Tap Tempo — mehrfach klicken um BPM zu erkennen">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                        CornerRadius="3">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#2D4060"/>
+                                        <Setter TargetName="Bd" Property="BorderBrush" Value="#4A80E0"/>
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#3A60B0"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+
+                </StackPanel>
+            </Border>
 
         </Grid>
     </Border>

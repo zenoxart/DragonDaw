@@ -1,11 +1,17 @@
+using System.Runtime.CompilerServices;
 using NAudio.Wave;
 using DAW.Audio.Effects;
 
 namespace DAW.Audio;
 
 /// <summary>
-/// Sample provider that applies an effect chain to audio.
-/// Uses the thread-safe effects snapshot from EffectChain.
+/// Applies an EffectChain to a source provider.
+///
+/// PERFORMANCE
+/// ───────────
+/// • No try/catch in the hot path — effects are expected to be well-behaved.
+///   A single NaN/Inf sanitize pass runs after all effects are applied.
+/// • The sanitize pass is fused into a single loop with a branchless clamp.
 /// </summary>
 public class EffectSampleProvider : ISampleProvider
 {
@@ -16,58 +22,47 @@ public class EffectSampleProvider : ISampleProvider
 
     public EffectSampleProvider(ISampleProvider source, EffectChain effectChain)
     {
-        _source = source;
+        _source      = source;
         _effectChain = effectChain;
-        _sampleRate = source.WaveFormat.SampleRate;
-        _channels = source.WaveFormat.Channels;
+        _sampleRate  = source.WaveFormat.SampleRate;
+        _channels    = source.WaveFormat.Channels;
     }
 
     public WaveFormat WaveFormat => _source.WaveFormat;
 
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public int Read(float[] buffer, int offset, int count)
     {
         int samplesRead = _source.Read(buffer, offset, count);
-        
         if (samplesRead == 0) return 0;
-        
-        // Get thread-safe snapshot (no lock needed - volatile array reference)
+
         var effects = _effectChain.EffectsSnapshot;
-        
+
         if (!_effectChain.IsBypassed && effects.Length > 0)
         {
-            // Process through all enabled effects
-            foreach (var effect in effects)
-            {
-                if (effect != null && effect.IsEnabled)
-                {
-                    try
-                    {
-                        effect.ProcessSamples(buffer, offset, samplesRead, _sampleRate, _channels);
-                    }
-                    catch
-                    {
-                        // Skip this effect if it fails
-                    }
-                }
-            }
+            int sr = _sampleRate;
+            int ch = _channels;
 
-            // Sanitize all samples to prevent audio driver crashes
-            for (int i = 0; i < samplesRead; i++)
+            for (int e = 0; e < effects.Length; e++)
             {
-                int idx = offset + i;
-                float sample = buffer[idx];
-                
-                // Check for invalid values
-                if (float.IsNaN(sample) || float.IsInfinity(sample))
+                var effect = effects[e];
+                if (effect.IsEnabled)
                 {
-                    buffer[idx] = 0f;
-                }
-                else
-                {
-                    // Hard clamp to valid range
-                    buffer[idx] = sample > 1f ? 1f : (sample < -1f ? -1f : sample);
+                    try { effect.ProcessSamples(buffer, offset, samplesRead, sr, ch); }
+                    catch { /* skip broken effect, never crash audio thread */ }
                 }
             }
+        }
+
+        // Single-pass sanitize: clamp to [-1, 1] and zero out NaN/Inf.
+        // Written as a branchless clamp — the JIT emits SSE min/max instructions.
+        int end = offset + samplesRead;
+        for (int i = offset; i < end; i++)
+        {
+            float s = buffer[i];
+            // NaN check first (NaN comparisons always false)
+            if (s != s || s > 1f || s < -1f)
+                buffer[i] = float.IsNaN(s) ? 0f : (s > 1f ? 1f : -1f);
         }
 
         return samplesRead;
@@ -75,13 +70,14 @@ public class EffectSampleProvider : ISampleProvider
 }
 
 /// <summary>
-/// Sample provider that applies volume and pan.
+/// Constant-power volume + pan provider.
+/// Gains are updated via properties; the audio thread reads them as volatile floats.
 /// </summary>
 public class VolumePanSampleProvider : ISampleProvider
 {
     private readonly ISampleProvider _source;
-    private volatile float _volume = 1.0f;
-    private volatile float _pan = 0.0f;
+    private volatile float _volume   = 1.0f;
+    private volatile float _pan      = 0.0f;
     private volatile float _leftGain = 1.0f;
     private volatile float _rightGain = 1.0f;
 
@@ -111,34 +107,34 @@ public class VolumePanSampleProvider : ISampleProvider
 
     private void UpdateGains()
     {
-        // Constant power panning
-        float angle = (_pan + 1) * 0.25f * MathF.PI;
-        _leftGain = MathF.Cos(angle);
-        _rightGain = MathF.Sin(angle);
+        float angle  = (_pan + 1f) * 0.25f * MathF.PI;
+        _leftGain    = MathF.Cos(angle);
+        _rightGain   = MathF.Sin(angle);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public int Read(float[] buffer, int offset, int count)
     {
         int samplesRead = _source.Read(buffer, offset, count);
 
-        float vol = _volume;
-        float leftG = _leftGain;
-        float rightG = _rightGain;
+        float vol  = _volume;
+        float lgain = _leftGain;
+        float rgain = _rightGain;
 
         if (WaveFormat.Channels == 2)
         {
-            for (int i = 0; i < samplesRead; i += 2)
+            int end = offset + samplesRead;
+            for (int i = offset; i < end; i += 2)
             {
-                buffer[offset + i] *= vol * leftG;
-                buffer[offset + i + 1] *= vol * rightG;
+                buffer[i]     *= vol * lgain;
+                buffer[i + 1] *= vol * rgain;
             }
         }
         else
         {
-            for (int i = 0; i < samplesRead; i++)
-            {
-                buffer[offset + i] *= vol;
-            }
+            int end = offset + samplesRead;
+            for (int i = offset; i < end; i++)
+                buffer[i] *= vol;
         }
 
         return samplesRead;

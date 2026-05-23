@@ -941,8 +941,8 @@ namespace DAW.Views
                 effects.RemoveAt(currentIndex);
                 effects.Insert(newIndex, slot.Effect);
 
-                // Rebuild effect chain
-                chain.Effects.Clear();
+                // Rebuild effect chain using thread-safe API
+                chain.Clear();
                 foreach (var fx in effects)
                     chain.AddEffect(fx);
 
@@ -1120,6 +1120,19 @@ namespace DAW.Views
                 ch.SendTargets.CollectionChanged -= OnRoutingSendTargetsChanged;
                 ch.SendTargets.CollectionChanged += OnRoutingSendTargetsChanged;
             }
+
+            // Redraw cables when the selected mixer channel changes
+            if (ViewModel != null)
+            {
+                ViewModel.PropertyChanged -= OnViewModelPropertyChanged;
+                ViewModel.PropertyChanged += OnViewModelPropertyChanged;
+            }
+        }
+
+        private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(ViewModels.MainViewModel.SelectedMixerChannel))
+                Dispatcher.InvokeAsync(RedrawRoutingCables, System.Windows.Threading.DispatcherPriority.Render);
         }
 
         private void OnRoutingCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
@@ -1151,7 +1164,7 @@ namespace DAW.Views
             try
             {
                 _routingDragStartOnOverlay = outSocket.TranslatePoint(
-                    new Point(outSocket.ActualWidth / 2, outSocket.ActualHeight / 2), overlay);
+                    new Point(outSocket.ActualWidth / 2, outSocket.ActualHeight), overlay);
             }
             catch
             {
@@ -1186,59 +1199,53 @@ namespace DAW.Views
                 overlay.Children.Remove(_routingDragPath);
             _routingDragPath = null;
 
+            // Read position BEFORE releasing capture
+            var dropOnScroll = e.GetPosition(scrollViewer);
+            var dropOnView   = e.GetPosition(this);
+
             scrollViewer.ReleaseMouseCapture();
 
-            if (_routingSourceChannel != null)
+            if (_routingSourceChannel == null)
             {
-                // Hit-test relative to the ScrollViewer (captures the channel IN sockets)
-                // and also check the MixerView root for the master IN socket.
-                var dropOnScroll = e.GetPosition(scrollViewer);
-                var inSocket = HitTestForSocketTag(scrollViewer, dropOnScroll, "IO_SOCKET");
+                _isRoutingDrag = false;
+                return;
+            }
 
-                // Also check master IN socket (outside ScrollViewer)
-                if (inSocket == null)
+            // Hit-test: walk entire visual tree under drop point.
+            // Use the MixerView root so scroll offset is handled correctly.
+            FrameworkElement? inSocket = FindSocketUnderPoint(dropOnView);
+
+            if (inSocket != null)
+            {
+                if (inSocket.Tag as string == "MASTER_IN_SOCKET")
                 {
-                    var dropOnView = e.GetPosition(this);
-                    inSocket = HitTestForSocketTag(this, dropOnView, "MASTER_IN_SOCKET");
+                    _routingSourceChannel.SendTargets.Clear();
+                    RedrawRoutingCables();
+                    if (ViewModel != null)
+                        ViewModel.StatusMessage = $"🔌 {_routingSourceChannel.Name} → MASTER";
                 }
-
-                if (inSocket != null)
+                else
                 {
-                    if (inSocket.Tag as string == "MASTER_IN_SOCKET")
+                    var targetChannel = FindMixerChannelFromElement(inSocket);
+                    if (targetChannel != null && targetChannel != _routingSourceChannel)
                     {
-                        _routingSourceChannel.SendTargets.Clear();
-                        RedrawRoutingCables();
-                        if (ViewModel != null)
-                            ViewModel.StatusMessage = $"🔌 {_routingSourceChannel.Name} → MASTER";
-                    }
-                    else
-                    {
-                        var targetChannel = FindMixerChannelFromElement(inSocket);
-                        if (targetChannel != null && targetChannel != _routingSourceChannel)
+                        if (_routingSourceChannel.SendTargets.Contains(targetChannel.ChannelNumber))
                         {
-                            if (_routingSourceChannel.SendTargets.Contains(targetChannel.ChannelNumber))
-                            {
-                                // Removing an existing send — always allowed
-                                _routingSourceChannel.RemoveSend(targetChannel.ChannelNumber);
-                                RedrawRoutingCables();
-                                if (ViewModel != null)
-                                    ViewModel.StatusMessage = $"🔌 {_routingSourceChannel.Name} ⊗ {targetChannel.Name}";
-                            }
-                            else
-                            {
-                                // Adding a new send — check for cycles first
-                                if (ViewModel != null && ViewModel.WouldCreateCycle(_routingSourceChannel, targetChannel))
-                                {
-                                    ViewModel.StatusMessage = $"✗ Loop verhindert: {targetChannel.Name} → … → {_routingSourceChannel.Name} existiert bereits";
-                                }
-                                else
-                                {
-                                    _routingSourceChannel.AddSend(targetChannel.ChannelNumber);
-                                    RedrawRoutingCables();
-                                    if (ViewModel != null)
-                                        ViewModel.StatusMessage = $"🔌 {_routingSourceChannel.Name} → {targetChannel.Name}";
-                                }
-                            }
+                            _routingSourceChannel.RemoveSend(targetChannel.ChannelNumber);
+                            RedrawRoutingCables();
+                            if (ViewModel != null)
+                                ViewModel.StatusMessage = $"🔌 {_routingSourceChannel.Name} ⊗ {targetChannel.Name}";
+                        }
+                        else if (ViewModel == null || !ViewModel.WouldCreateCycle(_routingSourceChannel, targetChannel))
+                        {
+                            _routingSourceChannel.AddSend(targetChannel.ChannelNumber);
+                            RedrawRoutingCables();
+                            if (ViewModel != null)
+                                ViewModel.StatusMessage = $"🔌 {_routingSourceChannel.Name} → {targetChannel.Name}";
+                        }
+                        else if (ViewModel != null)
+                        {
+                            ViewModel.StatusMessage = $"✗ Loop verhindert: {targetChannel.Name} → … → {_routingSourceChannel.Name}";
                         }
                     }
                 }
@@ -1249,8 +1256,96 @@ namespace DAW.Views
         }
 
         /// <summary>
-        /// Redraws all routing cables on the RoutingOverlay canvas (inside the ScrollViewer).
-        /// Cables are naturally clipped to the visible mixer area.
+        /// Walks the visual tree under <paramref name="pointOnView"/> (in MixerView
+        /// coordinates) looking for an element tagged IO_SOCKET or MASTER_IN_SOCKET.
+        /// Uses proximity search (nearest socket within 32px) as fallback so the user
+        /// doesn't have to pixel-perfectly land on the transparent socket border.
+        /// </summary>
+        private FrameworkElement? FindSocketUnderPoint(Point pointOnView)
+        {
+            // Strategy 1: exact VisualTreeHelper.HitTest
+            FrameworkElement? found = null;
+            System.Windows.Media.VisualTreeHelper.HitTest(
+                this,
+                target =>
+                {
+                    if (target is FrameworkElement fe && fe.Name == "RoutingOverlay")
+                        return System.Windows.Media.HitTestFilterBehavior.ContinueSkipSelfAndChildren;
+                    return System.Windows.Media.HitTestFilterBehavior.Continue;
+                },
+                result =>
+                {
+                    var current = result.VisualHit as DependencyObject;
+                    while (current != null)
+                    {
+                        if (current is FrameworkElement fe)
+                        {
+                            var tag = fe.Tag as string;
+                            if (tag == "IO_SOCKET" || tag == "MASTER_IN_SOCKET")
+                            { found = fe; return System.Windows.Media.HitTestResultBehavior.Stop; }
+                        }
+                        current = System.Windows.Media.VisualTreeHelper.GetParent(current);
+                    }
+                    return System.Windows.Media.HitTestResultBehavior.Continue;
+                },
+                new System.Windows.Media.PointHitTestParameters(pointOnView));
+
+            if (found != null) return found;
+
+            // Strategy 2: collect ALL IO_SOCKET elements in the visual tree and
+            // return the nearest one within 32 device-independent pixels.
+            // This handles transparent-background borders and sub-pixel offsets.
+            var candidates = new List<(FrameworkElement el, double dist)>();
+            CollectSocketElements(this, candidates, pointOnView);
+
+            const double maxDist = 32.0;
+            return candidates
+                .Where(c => c.dist <= maxDist)
+                .OrderBy(c => c.dist)
+                .Select(c => c.el)
+                .FirstOrDefault();
+        }
+
+        /// <summary>Recursively collects all IO_SOCKET / MASTER_IN_SOCKET elements
+        /// and their distance (centre) from <paramref name="refPoint"/>.</summary>
+        private void CollectSocketElements(DependencyObject parent,
+            List<(FrameworkElement, double)> result, Point refPoint)
+        {
+            int count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent);
+            for (int i = 0; i < count; i++)
+            {
+                var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
+
+                // Skip RoutingOverlay — it only contains cable paths
+                if (child is FrameworkElement fce && fce.Name == "RoutingOverlay") continue;
+
+                if (child is FrameworkElement fe)
+                {
+                    var tag = fe.Tag as string;
+                    if (tag == "IO_SOCKET" || tag == "MASTER_IN_SOCKET")
+                    {
+                        try
+                        {
+                            // Transform element centre to MixerView coordinates
+                            var centre = fe.TranslatePoint(
+                                new Point(fe.ActualWidth / 2, fe.ActualHeight / 2), this);
+                            double dx = centre.X - refPoint.X;
+                            double dy = centre.Y - refPoint.Y;
+                            result.Add((fe, Math.Sqrt(dx * dx + dy * dy)));
+                        }
+                        catch { /* element not in visual tree yet */ }
+                    }
+                }
+
+                CollectSocketElements(child, result, refPoint);
+            }
+        }
+
+        /// <summary>
+        /// Redraws routing cables for the currently selected mixer channel only.
+        /// Outgoing cables (selected → target) are drawn in full color.
+        /// Incoming cables (source → selected) are drawn dimmed.
+        /// When no channel is selected, the overlay is cleared.
         /// </summary>
         private void RedrawRoutingCables()
         {
@@ -1262,45 +1357,61 @@ namespace DAW.Views
             foreach (var p in toRemove)
                 overlay.Children.Remove(p);
 
+            var selected = ViewModel.SelectedMixerChannel;
+            if (selected == null) return;  // no selection → no cables shown
+
             var channelList = ViewModel.MixerChannels.ToList();
 
-            foreach (var sourceChannel in channelList)
+            // Outgoing: selected channel → target(s)
+            foreach (var targetNum in selected.SendTargets)
             {
-                foreach (var targetNum in sourceChannel.SendTargets)
-                {
-                    var targetChannel = channelList.FirstOrDefault(c => c.ChannelNumber == targetNum);
-                    if (targetChannel == null) continue;
-
-                    var outSocket = FindSocketInScrollViewer(sourceChannel, "IO_SOCKET");
-                    var inSocket  = FindSocketInScrollViewer(targetChannel,  "IO_SOCKET");
-                    if (outSocket == null || inSocket == null) continue;
-
-                    try
-                    {
-                        var start = outSocket.TranslatePoint(
-                            new Point(outSocket.ActualWidth / 2, outSocket.ActualHeight / 2), overlay);
-                        var end = inSocket.TranslatePoint(
-                            new Point(inSocket.ActualWidth / 2, inSocket.ActualHeight / 2), overlay);
-
-                        var cable = CreateRoutingPath(start, end, sourceChannel.Color, false);
-                        cable.ToolTip = $"{sourceChannel.Name} → {targetChannel.Name}\nKlick zum Trennen";
-
-                        var src = sourceChannel;
-                        var tgt = targetChannel;
-                        cable.MouseLeftButtonDown += (s, ev) =>
-                        {
-                            src.RemoveSend(tgt.ChannelNumber);
-                            RedrawRoutingCables();
-                            if (ViewModel != null)
-                                ViewModel.StatusMessage = $"🔌 {src.Name} ✗ {tgt.Name}";
-                            ev.Handled = true;
-                        };
-
-                        overlay.Children.Add(cable);
-                    }
-                    catch { /* element not yet in visual tree */ }
-                }
+                var target = channelList.FirstOrDefault(c => c.ChannelNumber == targetNum);
+                if (target != null)
+                    DrawCable(overlay, selected, target, outgoing: true);
             }
+
+            // Incoming: other channels → selected channel
+            foreach (var src in channelList)
+            {
+                if (src == selected) continue;
+                if (src.SendTargets.Contains(selected.ChannelNumber))
+                    DrawCable(overlay, src, selected, outgoing: false);
+            }
+        }
+
+        private void DrawCable(
+            Canvas overlay,
+            Models.Mixer.MixerChannel sourceChannel,
+            Models.Mixer.MixerChannel targetChannel,
+            bool outgoing)
+        {
+            var outSocket = FindSocketInScrollViewer(sourceChannel, "IO_SOCKET");
+            var inSocket  = FindSocketInScrollViewer(targetChannel,  "IO_SOCKET");
+            if (outSocket == null || inSocket == null) return;
+
+            try
+            {
+                var start = outSocket.TranslatePoint(
+                    new Point(outSocket.ActualWidth / 2, outSocket.ActualHeight), overlay);
+                var end = inSocket.TranslatePoint(
+                    new Point(inSocket.ActualWidth / 2, inSocket.ActualHeight), overlay);
+
+                // Full color for outgoing, dimmed for incoming
+                var color = outgoing
+                    ? sourceChannel.Color
+                    : System.Windows.Media.Color.FromArgb(110,
+                        sourceChannel.Color.R, sourceChannel.Color.G, sourceChannel.Color.B);
+
+                var cable = CreateRoutingPath(start, end, color, false);
+                cable.ToolTip = $"{sourceChannel.Name} → {targetChannel.Name}\nKlick zum Trennen";
+
+                // Cable click disconnect — handled via the overlay's MouseLeftButtonDown
+                // (see RoutingOverlay_MouseLeftButtonDown). Store routing info as Tag.
+                cable.Tag = (sourceChannel, targetChannel);
+
+                overlay.Children.Add(cable);
+            }
+            catch { /* element not yet in visual tree */ }
         }
 
         private FrameworkElement? FindSocketInScrollViewer(Models.Mixer.MixerChannel channel, string socketTag)
@@ -1355,6 +1466,22 @@ namespace DAW.Views
             return null;
         }
 
+        private static System.Windows.Shapes.Path? HitTestForCable(Canvas overlay, Point position)
+        {
+            // Manual geometry hit-test against all cable paths in the overlay.
+            // We use StrokeThickness + a tolerance so thin cables are easier to click.
+            const double tolerance = 6.0;
+            foreach (var child in overlay.Children.OfType<System.Windows.Shapes.Path>())
+            {
+                if (child.Data == null) continue;
+                // Widen the stroke for hit testing
+                var pen = new System.Windows.Media.Pen(System.Windows.Media.Brushes.Black, child.StrokeThickness + tolerance * 2);
+                if (child.Data.StrokeContains(pen, position))
+                    return child;
+            }
+            return null;
+        }
+
         private static FrameworkElement? HitTestForSocketTag(UIElement root, Point position, string tag)
         {
             FrameworkElement? found = null;
@@ -1397,24 +1524,14 @@ namespace DAW.Views
             System.Windows.Media.Color color,
             bool isDragging)
         {
-            var geometry = new System.Windows.Media.PathGeometry();
-            var figure   = new System.Windows.Media.PathFigure { StartPoint = start };
-            double offset = Math.Max(40, Math.Abs(end.Y - start.Y) * 0.6);
-            figure.Segments.Add(new System.Windows.Media.BezierSegment(
-                new Point(start.X, start.Y + offset),
-                new Point(end.X,   end.Y   - offset),
-                end, true));
-            geometry.Figures.Add(figure);
-
-            var brushColor = isDragging
-                ? System.Windows.Media.Color.FromArgb(160, color.R, color.G, color.B)
-                : color;
-
             var path = new System.Windows.Shapes.Path
             {
-                Data            = geometry,
-                Stroke          = new System.Windows.Media.SolidColorBrush(brushColor),
-                StrokeThickness = isDragging ? 2 : 3,
+                Data            = BuildCableGeometry(start, end),
+                Stroke          = new System.Windows.Media.SolidColorBrush(
+                    isDragging
+                        ? System.Windows.Media.Color.FromArgb(160, color.R, color.G, color.B)
+                        : color),
+                StrokeThickness    = isDragging ? 2 : 3,
                 StrokeStartLineCap = System.Windows.Media.PenLineCap.Round,
                 StrokeEndLineCap   = System.Windows.Media.PenLineCap.Round,
                 IsHitTestVisible   = !isDragging,
@@ -1437,15 +1554,31 @@ namespace DAW.Views
 
         private static void UpdateRoutingPath(System.Windows.Shapes.Path path, Point start, Point end)
         {
+            path.Data = BuildCableGeometry(start, end);
+        }
+
+        /// <summary>
+        /// Builds a downward-hanging Bezier cable geometry.
+        /// Both control points are placed below their respective anchors so the
+        /// cable always sags downward like a real patch cable.
+        /// The sag is capped so cables stay within the visible mixer area.
+        /// </summary>
+        private static System.Windows.Media.PathGeometry BuildCableGeometry(Point start, Point end)
+        {
+            double dx  = Math.Abs(end.X - start.X);
+            // Sag scales with horizontal distance but is capped at 36 px
+            // so cables stay visible within the channel strip bottom area
+            double sag = Math.Min(36, Math.Max(16, dx * 0.35));
+
+            var cp1 = new Point(start.X, start.Y + sag);
+            var cp2 = new Point(end.X,   end.Y   + sag);
+
+            var figure = new System.Windows.Media.PathFigure { StartPoint = start };
+            figure.Segments.Add(new System.Windows.Media.BezierSegment(cp1, cp2, end, true));
+
             var geometry = new System.Windows.Media.PathGeometry();
-            var figure   = new System.Windows.Media.PathFigure { StartPoint = start };
-            double offset = Math.Max(40, Math.Abs(end.Y - start.Y) * 0.6);
-            figure.Segments.Add(new System.Windows.Media.BezierSegment(
-                new Point(start.X, start.Y + offset),
-                new Point(end.X,   end.Y   - offset),
-                end, true));
             geometry.Figures.Add(figure);
-            path.Data = geometry;
+            return geometry;
         }
     }
 }

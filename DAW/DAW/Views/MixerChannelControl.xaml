@@ -203,20 +203,41 @@ Background="{DynamicResource PanelBg}">
         </Style>
     </UserControl.Resources>
     
-    <Border x:Name="ChannelBorder" 
-            CornerRadius="0" 
-            Background="{DynamicResource PanelBg}"
+    <Grid>
+        <!-- Selection indicator: bright top bar + full background tint.
+             Uses DynamicResource so all themes are automatically correct. -->
+        <Border x:Name="SelectionGlow"
+                CornerRadius="0"
+                BorderThickness="0,3,0,0"
+                Margin="0">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="BorderBrush" Value="Transparent"/>
+                    <Setter Property="Background" Value="Transparent"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=local:MixerChannelControl}}" Value="True">
+                            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                            <Setter Property="Background" Value="{DynamicResource ChannelSelectionGlow}"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+        </Border>
+
+        <Border x:Name="ChannelBorder"
+            CornerRadius="0"
             MouseLeftButtonDown="Channel_Select"
             Cursor="Hand">
         <Border.Style>
             <Style TargetType="Border">
+                <Setter Property="Background" Value="{DynamicResource PanelBg}"/>
                 <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
                 <Setter Property="BorderThickness" Value="1"/>
                 <Style.Triggers>
                     <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=local:MixerChannelControl}}" Value="True">
+                        <Setter Property="Background" Value="{DynamicResource ChannelSelectionBg}"/>
                         <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
                         <Setter Property="BorderThickness" Value="2"/>
-                        <Setter Property="Background" Value="{DynamicResource HighlightBg}"/>
                     </DataTrigger>
                 </Style.Triggers>
             </Style>
@@ -230,7 +251,7 @@ Background="{DynamicResource PanelBg}">
                 <RowDefinition Height="Auto"/>  <!-- Row 4: dB Display -->
                 <RowDefinition Height="Auto"/>  <!-- Row 5: Mute/Solo -->
                 <RowDefinition Height="Auto"/>  <!-- Row 6: Play indicator -->
-                <RowDefinition Height="Auto"/>  <!-- Row 7: IN + OUT sockets (bottom) -->
+                <RowDefinition Height="60"/>    <!-- Row 7: IO socket + cable hang space -->
             </Grid.RowDefinitions>
 
             <!-- Track Number & Color -->
@@ -257,7 +278,7 @@ Background="{DynamicResource PanelBg}">
                        Cursor="SizeAll"/>
             
             <!-- Pan Control (hidden in compact mode) -->
-            <StackPanel Grid.Row="2" HorizontalAlignment="Center" Margin="0,4"
+            <StackPanel Grid.Row="2" HorizontalAlignment="Center" Margin="0,2,0,2"
                         Visibility="{Binding IsCompact, RelativeSource={RelativeSource AncestorType=local:MixerChannelControl}, Converter={StaticResource InverseBoolToVis}}">
                 <Slider Value="{Binding Pan, Mode=TwoWay}" 
                         Style="{StaticResource FLPan}"
@@ -376,7 +397,7 @@ Background="{DynamicResource PanelBg}">
             </Grid>
             
             <!-- dB Display -->
-            <Border Grid.Row="4" Background="{DynamicResource DarkBg}" CornerRadius="2" Padding="4,2" Margin="4,4">
+            <Border Grid.Row="4" Background="{DynamicResource DarkBg}" CornerRadius="2" Padding="4,1" Margin="4,2,4,1">
                 <TextBlock Text="{Binding VolumeDisplay}" 
                            Foreground="{DynamicResource LapisAccentBrush}" 
                            FontSize="9" 
@@ -385,7 +406,7 @@ Background="{DynamicResource PanelBg}">
             </Border>
             
             <!-- Mute/Solo Buttons -->
-            <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,4">
+            <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,1,0,1">
                 <ToggleButton Content="M" 
                               IsChecked="{Binding IsMuted, Mode=TwoWay}" 
                               Style="{StaticResource MuteBtn}"
@@ -399,7 +420,7 @@ Background="{DynamicResource PanelBg}">
             </StackPanel>
             
             <!-- Play Indicator (hidden in compact mode) -->
-            <Border Grid.Row="6" Height="18" CornerRadius="2" Margin="4,4,4,2" Background="{DynamicResource DarkBg}"
+            <Border Grid.Row="6" Height="12" CornerRadius="2" Margin="4,1,4,0" Background="{DynamicResource DarkBg}"
                     Visibility="{Binding IsCompact, RelativeSource={RelativeSource AncestorType=local:MixerChannelControl}, Converter={StaticResource InverseBoolToVis}}">
                 <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="8" Foreground="{DynamicResource TextSecondary}">
                     <TextBlock.Style>
@@ -419,15 +440,16 @@ Background="{DynamicResource PanelBg}">
             <!-- IO Socket (combined IN/OUT) -->
             <Border Grid.Row="7"
                     HorizontalAlignment="Center"
+                    VerticalAlignment="Top"
                     Tag="IO_SOCKET"
                     Background="Transparent"
-                    Padding="6,4"
+                    Padding="8,4,8,0"
                     Cursor="Hand"
                     ToolTip="Ziehen = Routen | Rechtsklick = Master-Verbindung trennen"
                     MouseRightButtonDown="OutSocket_RightClick"
-                    Margin="0,1,0,2">
+                    Margin="0,1,0,0">
                 <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
-                    <Ellipse Width="14" Height="14" StrokeThickness="2">
+                    <Ellipse Width="18" Height="18" StrokeThickness="2">
                         <Ellipse.Style>
                             <Style TargetType="Ellipse">
                                 <Setter Property="Fill" Value="{DynamicResource ControlBg}"/>
@@ -441,9 +463,10 @@ Background="{DynamicResource PanelBg}">
                         </Ellipse.Style>
                     </Ellipse>
                     <TextBlock Text="I/O" FontSize="7" Foreground="{DynamicResource TextDim}"
-                               HorizontalAlignment="Center" Margin="0,1,0,0"/>
+                               HorizontalAlignment="Center" Margin="0,2,0,0"/>
                 </StackPanel>
             </Border>
         </Grid>
     </Border>
+    </Grid>
 </UserControl>

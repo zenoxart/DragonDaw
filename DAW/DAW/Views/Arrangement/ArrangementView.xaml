@@ -2,13 +2,13 @@
 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 xmlns:vm="clr-namespace:DAW.ViewModels"
+xmlns:seq="clr-namespace:DAW.ViewModels.Sequencer"
 xmlns:local="clr-namespace:DAW.Views.Arrangement"
 Background="{DynamicResource DarkBg}">
 
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
 
-        <!-- Small toolbar button -->
         <Style x:Key="ArrangeBtn" TargetType="Button">
             <Setter Property="Background"   Value="{DynamicResource ControlBg}"/>
             <Setter Property="Foreground"   Value="{DynamicResource TextSecondary}"/>
@@ -25,10 +25,8 @@ Background="{DynamicResource DarkBg}">
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="3"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"/>
+                                CornerRadius="3" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -41,13 +39,9 @@ Background="{DynamicResource DarkBg}">
             </Setter>
         </Style>
 
-        <!-- Track header inline DataTemplate -->
-        <DataTemplate x:Key="TrackHeaderTemplate"
-                      DataType="{x:Type vm:ArrangementTrackViewModel}">
+        <DataTemplate x:Key="TrackHeaderTemplate" DataType="{x:Type vm:ArrangementTrackViewModel}">
             <Border Height="{Binding DataContext.CurrentTrackHeight, RelativeSource={RelativeSource AncestorType=local:ArrangementView}}"
-                    BorderBrush="{DynamicResource ControlBg}"
-                    BorderThickness="0,0,0,1"
-                    Cursor="Hand">
+                    BorderBrush="{DynamicResource ControlBg}" BorderThickness="0,0,0,1" Cursor="Hand">
                 <Border.Style>
                     <Style TargetType="Border">
                         <Setter Property="Background" Value="{DynamicResource PanelBg}"/>
@@ -59,59 +53,40 @@ Background="{DynamicResource DarkBg}">
                     </Style>
                 </Border.Style>
                 <Border.InputBindings>
-                    <MouseBinding Gesture="LeftClick" Command="{Binding SelectTrackCommand}"/>
+                    <MouseBinding Gesture="LeftClick"  Command="{Binding SelectTrackCommand}"/>
                     <MouseBinding Gesture="RightClick" Command="{Binding DeleteTrackCommand}"/>
                 </Border.InputBindings>
                 <Grid Margin="4,0">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="6"/>   <!-- color strip (clickable) -->
-                        <ColumnDefinition Width="12"/>  <!-- LED -->
-                        <ColumnDefinition Width="*"/>   <!-- name -->
-                        <ColumnDefinition Width="18"/>  <!-- X -->
-                        <ColumnDefinition Width="22"/>  <!-- M -->
-                        <ColumnDefinition Width="22"/>  <!-- S -->
+                        <ColumnDefinition Width="6"/>
+                        <ColumnDefinition Width="12"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="18"/>
+                        <ColumnDefinition Width="22"/>
+                        <ColumnDefinition Width="22"/>
                     </Grid.ColumnDefinitions>
-
-                    <!-- Track colour strip (click to open palette) -->
-                    <Border Grid.Column="0" CornerRadius="2" Margin="0,8" Cursor="Hand">
-                        <Border.Background>
-                            <SolidColorBrush Color="{Binding Color}"/>
-                        </Border.Background>
+                    <Border Grid.Column="0" CornerRadius="2" Margin="0,8" Cursor="Hand" ToolTip="Farbe ändern">
+                        <Border.Background><SolidColorBrush Color="{Binding Color}"/></Border.Background>
                         <Border.InputBindings>
                             <MouseBinding Gesture="LeftClick" Command="{Binding ToggleColorPaletteCommand}"/>
                         </Border.InputBindings>
-                        <Border.ToolTip>Farbe ändern</Border.ToolTip>
                     </Border>
-
-                    <!-- Color palette popup -->
-                    <Popup Grid.Column="0" 
-                           IsOpen="{Binding IsColorPaletteOpen}" 
-                           Placement="Right" 
-                           StaysOpen="False"
-                           AllowsTransparency="True"
-                           PopupAnimation="Fade">
-                    <Border Background="{DynamicResource DropdownBg}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" 
-                                CornerRadius="6" Padding="8" Margin="4,0,8,8">
-                            <Border.Effect>
-                                <DropShadowEffect ShadowDepth="2" BlurRadius="10" Opacity="0.5" Color="Black"/>
-                            </Border.Effect>
+                    <Popup Grid.Column="0" IsOpen="{Binding IsColorPaletteOpen}"
+                           Placement="Right" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+                        <Border Background="{DynamicResource DropdownBg}" BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="1" CornerRadius="6" Padding="8" Margin="4,0,8,8">
+                            <Border.Effect><DropShadowEffect ShadowDepth="2" BlurRadius="10" Opacity="0.5" Color="Black"/></Border.Effect>
                             <StackPanel>
                                 <TextBlock Text="Track-Farbe" Foreground="{DynamicResource TextSecondary}" FontSize="10" Margin="0,0,0,6"/>
                                 <ItemsControl ItemsSource="{Binding Source={x:Static vm:ArrangementTrackViewModel.TrackColorPalette}}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <WrapPanel Width="126"/>
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Width="126"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
                                             <Border Width="18" Height="18" CornerRadius="3" Margin="2" Cursor="Hand"
-                                BorderThickness="1" BorderBrush="{DynamicResource DarkBg}">
-                                                <Border.Background>
-                                                    <SolidColorBrush Color="{Binding}"/>
-                                                </Border.Background>
+                                                    BorderThickness="1" BorderBrush="{DynamicResource DarkBg}">
+                                                <Border.Background><SolidColorBrush Color="{Binding}"/></Border.Background>
                                                 <Border.InputBindings>
-                                                    <MouseBinding Gesture="LeftClick" 
+                                                    <MouseBinding Gesture="LeftClick"
                                                                   Command="{Binding DataContext.SetColorCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                                   CommandParameter="{Binding}"/>
                                                 </Border.InputBindings>
@@ -131,16 +106,10 @@ Background="{DynamicResource DarkBg}">
                             </StackPanel>
                         </Border>
                     </Popup>
-
-                    <!-- Selection indicator -->
                     <Border Grid.Column="0" Width="2" HorizontalAlignment="Left" Margin="-4,6,-2,6" CornerRadius="1"
                             Visibility="{Binding IsSelected, Converter={StaticResource BoolToVis}}">
-                        <Border.Background>
-                            <SolidColorBrush Color="#D4AF37"/>
-                        </Border.Background>
+                        <Border.Background><SolidColorBrush Color="#D4AF37"/></Border.Background>
                     </Border>
-
-                    <!-- Activity LED -->
                     <Ellipse Grid.Column="1" Width="7" Height="7" Margin="2,0">
                         <Ellipse.Style>
                             <Style TargetType="Ellipse">
@@ -153,26 +122,11 @@ Background="{DynamicResource DarkBg}">
                             </Style>
                         </Ellipse.Style>
                     </Ellipse>
-
-                    <!-- Track name -->
-                    <TextBlock Grid.Column="2"
-                               Text="{Binding Name}"
-                               Foreground="{DynamicResource TextPrimary}"
-                               FontSize="11"
-                               VerticalAlignment="Center"
-                               TextTrimming="CharacterEllipsis"
-                               Margin="4,0"/>
-
-                    <!-- Delete Track -->
-                    <Button Grid.Column="3"
-                            Content="×"
-                            Command="{Binding DeleteTrackCommand}"
-                            Width="16" Height="16"
-                            FontSize="12" FontWeight="Bold"
-                            Margin="1,0" Cursor="Hand"
-                            BorderThickness="1"
-                            Foreground="#AA5555"
-                            ToolTip="Track löschen">
+                    <TextBlock Grid.Column="2" Text="{Binding Name}" Foreground="{DynamicResource TextPrimary}"
+                               FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="4,0"/>
+                    <Button Grid.Column="3" Content="×" Command="{Binding DeleteTrackCommand}"
+                            Width="16" Height="16" FontSize="12" FontWeight="Bold"
+                            Margin="1,0" Cursor="Hand" BorderThickness="1" Foreground="#AA5555" ToolTip="Track löschen">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource ArrangeBtn}">
                                 <Setter Property="Padding" Value="0"/>
@@ -188,15 +142,8 @@ Background="{DynamicResource DarkBg}">
                             </Style>
                         </Button.Style>
                     </Button>
-
-                    <!-- Mute -->
-                    <Button Grid.Column="4"
-                            Content="M"
-                            Command="{Binding ToggleMuteCommand}"
-                            Width="20" Height="18"
-                            FontSize="9" FontWeight="Bold"
-                            Margin="1,0" Cursor="Hand"
-                            BorderThickness="1">
+                    <Button Grid.Column="4" Content="M" Command="{Binding ToggleMuteCommand}"
+                            Width="20" Height="18" FontSize="9" FontWeight="Bold" Margin="1,0" Cursor="Hand" BorderThickness="1">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource ArrangeBtn}">
                                 <Setter Property="Padding" Value="0"/>
@@ -210,17 +157,9 @@ Background="{DynamicResource DarkBg}">
                             </Style>
                         </Button.Style>
                     </Button>
-
-                    <!-- Solo -->
-                    <Button Grid.Column="5"
-                            Content="S"
-                            Command="{Binding ToggleSoloCommand}"
-                            Width="20" Height="18"
-                            FontSize="9" FontWeight="Bold"
-                            Margin="1,0" Cursor="Hand"
-                            BorderThickness="1"
-                            MouseRightButtonDown="Solo_RightClick"
-                            ToolTip="Solo (Rechtsklick = Alle unsolo)">
+                    <Button Grid.Column="5" Content="S" Command="{Binding ToggleSoloCommand}"
+                            Width="20" Height="18" FontSize="9" FontWeight="Bold" Margin="1,0" Cursor="Hand" BorderThickness="1"
+                            MouseRightButtonDown="Solo_RightClick" ToolTip="Solo (Rechtsklick = Alle unsolo)">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource ArrangeBtn}">
                                 <Setter Property="Padding" Value="0"/>
@@ -241,80 +180,176 @@ Background="{DynamicResource DarkBg}">
 
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="36"/>   <!-- Toolbar -->
-            <RowDefinition Height="24"/>   <!-- Ruler row -->
-            <RowDefinition Height="*"/>    <!-- Content row - uses all available space -->
+            <RowDefinition Height="36"/>
+            <RowDefinition Height="24"/>
+            <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="200"/>   <!-- Track header panel -->
-            <ColumnDefinition Width="*"/>     <!-- Timeline area -->
+            <ColumnDefinition Width="160" MinWidth="100"/>
+            <ColumnDefinition Width="4"/>
+            <ColumnDefinition Width="200"/>
+            <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
         <!-- ══════════════════════════════════════════════════════════════════ -->
-        <!-- Toolbar (spans full width)                                        -->
+        <!-- PATTERN BROWSER  (col 0, all rows)                                -->
+        <!-- Collapsible via IsPatternBrowserVisible. Toggle with the « button -->
+        <!-- in the header or via View → Patterns & Channels (Ctrl+L).         -->
         <!-- ══════════════════════════════════════════════════════════════════ -->
-        <Border Grid.Row="0" Grid.ColumnSpan="2"
+        <Border Grid.Row="0" Grid.Column="0" Grid.RowSpan="3"
                 Background="{DynamicResource PanelBg}"
                 BorderBrush="{DynamicResource BorderBrush}"
-                BorderThickness="0,0,0,1"
-                Padding="8,4">
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-
-                <!-- Zoom controls -->
-                <Button Content="−" Command="{Binding ZoomOutCommand}"
-                        Style="{StaticResource ArrangeBtn}" Width="22" ToolTip="Herauszoomen (Ctrl+Scroll)"/>
-
-                <Border Background="{DynamicResource DarkBg}" CornerRadius="2" Padding="6,2" Margin="2,0">
-                    <TextBlock Text="{Binding ZoomDisplay}"
-                               Foreground="{DynamicResource AccentLightBrush}" FontSize="11"
-                               VerticalAlignment="Center" Width="36"
-                               TextAlignment="Center"/>
+                BorderThickness="0,0,1,0"
+                Visibility="{Binding IsPatternBrowserVisible, Converter={StaticResource BoolToVis}}">
+            <DockPanel>
+                <Border DockPanel.Dock="Top"
+                        Background="{DynamicResource ControlBg}"
+                        BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="0,0,0,1" Padding="6,4">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="PATTERNS" Foreground="{DynamicResource TextDim}"
+                                   FontSize="9" FontWeight="Bold" VerticalAlignment="Center"/>
+                        <Button Grid.Column="1" Content="«"
+                                Command="{Binding TogglePatternBrowserCommand}"
+                                Width="18" Height="16" FontSize="10" Padding="0"
+                                Background="Transparent" BorderThickness="0"
+                                Foreground="{DynamicResource TextDim}" Cursor="Hand"
+                                ToolTip="Panel ausblenden (Ansicht → Patterns &amp; Channels)"/>
+                    </Grid>
                 </Border>
 
-                <Button Content="+" Command="{Binding ZoomInCommand}"
-                        Style="{StaticResource ArrangeBtn}" Width="22" ToolTip="Hineinzoomen"/>
-                <Button Content="1:1" Command="{Binding ZoomResetCommand}"
-                        Style="{StaticResource ArrangeBtn}" ToolTip="Zoom zurücksetzen"/>
-                <Button Content="↕" Command="{Binding ResetTrackHeightCommand}"
-                        Style="{StaticResource ArrangeBtn}" Width="22" 
-                        ToolTip="Track-Höhe zurücksetzen" FontSize="13"/>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <!-- ItemsSource set from code-behind -->
+                    <ItemsControl x:Name="PatternBrowserList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type local:PatternBrowserItem}">
+                                <Border Height="26" CornerRadius="3" BorderThickness="1"
+                                        Cursor="Hand"
+                                        MouseLeftButtonDown="BrowserItem_MouseLeftButtonDown"
+                                        MouseMove="BrowserItem_MouseMove"
+                                        ToolTip="Klick = aktiv · Ziehen = Playlist-Track">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background"  Value="{DynamicResource ControlBg}"/>
+                                            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+                                            <Setter Property="Margin"      Value="2,1"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                    <Setter Property="Background"  Value="{DynamicResource AccentBrush}"/>
+                                                    <Setter Property="BorderBrush" Value="{DynamicResource AccentLightBrush}"/>
+                                                </DataTrigger>
+                                                <!-- Channel rows are indented -->
+                                                <DataTrigger Binding="{Binding IsPatternRow}" Value="False">
+                                                    <Setter Property="Margin" Value="12,1,2,1"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <Grid Margin="5,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="14"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="8"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding Icon}" FontSize="9" VerticalAlignment="Center">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                            <Setter Property="Foreground" Value="White"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <TextBlock Grid.Column="1" Text="{Binding Label}" FontSize="10"
+                                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                            <Setter Property="Foreground" Value="White"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsPatternRow}" Value="False">
+                                                            <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <!-- Color dot for channels -->
+                                        <Ellipse Grid.Column="2" Width="6" Height="6" VerticalAlignment="Center" Margin="0,0,1,0">
+                                            <Ellipse.Style>
+                                                <Style TargetType="Ellipse">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsPatternRow}" Value="False">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Ellipse.Style>
+                                            <Ellipse.Fill>
+                                                <SolidColorBrush Color="{Binding DotColor}"/>
+                                            </Ellipse.Fill>
+                                        </Ellipse>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </DockPanel>
+        </Border>
 
+        <!-- Splitter (hidden when pattern browser is collapsed) -->
+        <GridSplitter Grid.Row="0" Grid.Column="1" Grid.RowSpan="3"
+                      Width="4" HorizontalAlignment="Stretch"
+                      Background="{DynamicResource BorderBrush}" Cursor="SizeWE"
+                      Visibility="{Binding IsPatternBrowserVisible, Converter={StaticResource BoolToVis}}"/>
+
+        <!-- Toolbar (cols 2–3) -->
+        <Border Grid.Row="0" Grid.Column="2" Grid.ColumnSpan="2"
+                Background="{DynamicResource PanelBg}"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="0,0,0,1" Padding="8,4">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Content="−" Command="{Binding ZoomOutCommand}" Style="{StaticResource ArrangeBtn}" Width="22" ToolTip="Herauszoomen (Ctrl+Scroll)"/>
+                <Border Background="{DynamicResource DarkBg}" CornerRadius="2" Padding="6,2" Margin="2,0">
+                    <TextBlock Text="{Binding ZoomDisplay}" Foreground="{DynamicResource AccentLightBrush}"
+                               FontSize="11" VerticalAlignment="Center" Width="36" TextAlignment="Center"/>
+                </Border>
+                <Button Content="+" Command="{Binding ZoomInCommand}" Style="{StaticResource ArrangeBtn}" Width="22" ToolTip="Hineinzoomen"/>
+                <Button Content="1:1" Command="{Binding ZoomResetCommand}" Style="{StaticResource ArrangeBtn}" ToolTip="Zoom zurücksetzen"/>
+                <Button Content="↕" Command="{Binding ResetTrackHeightCommand}" Style="{StaticResource ArrangeBtn}" Width="22" ToolTip="Track-Höhe zurücksetzen" FontSize="13"/>
                 <Rectangle Width="1" Fill="{DynamicResource BorderBrush}" Margin="8,4"/>
-
-                <!-- Snap controls -->
-                <TextBlock Text="SNAP" Foreground="{DynamicResource TextDim}" FontSize="10"
-                           VerticalAlignment="Center" Margin="0,0,6,0"/>
-                <ComboBox SelectedIndex="{Binding SnapSelectedIndex, Mode=TwoWay}"
-                          MinWidth="80" FontSize="10" VerticalAlignment="Center">
+                <TextBlock Text="SNAP" Foreground="{DynamicResource TextDim}" FontSize="10" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <ComboBox SelectedIndex="{Binding SnapSelectedIndex, Mode=TwoWay}" MinWidth="80" FontSize="10" VerticalAlignment="Center">
                     <ComboBoxItem Content="OFF"/>
                     <ComboBoxItem Content="1/4  Beat"/>
                     <ComboBoxItem Content="1/8  Beat"/>
                     <ComboBoxItem Content="1/16 Beat"/>
                     <ComboBoxItem Content="1/32 Beat"/>
                 </ComboBox>
-
                 <Rectangle Width="1" Fill="{DynamicResource BorderBrush}" Margin="8,4"/>
-
-                <!-- BPM display -->
                 <Border Background="{DynamicResource DarkBg}" CornerRadius="2" Padding="8,2" Margin="2,0">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="{Binding BPM, StringFormat={}{0:F0}}"
-                                   Foreground="{DynamicResource AccentLightBrush}" FontWeight="Bold" FontSize="13"
-                                   VerticalAlignment="Center"/>
-                        <TextBlock Text=" BPM" Foreground="{DynamicResource TextDim}" FontSize="10"
-                                   VerticalAlignment="Center" Margin="1,2,0,0"/>
+                        <TextBlock Text="{Binding BPM, StringFormat={}{0:F0}}" Foreground="{DynamicResource AccentLightBrush}" FontWeight="Bold" FontSize="13" VerticalAlignment="Center"/>
+                        <TextBlock Text=" BPM" Foreground="{DynamicResource TextDim}" FontSize="10" VerticalAlignment="Center" Margin="1,2,0,0"/>
                     </StackPanel>
                 </Border>
-
                 <Rectangle Width="1" Fill="{DynamicResource BorderBrush}" Margin="8,4"/>
-
             </StackPanel>
         </Border>
 
-        <!-- ══════════════════════════════════════════════════════════════════ -->
-        <!-- Corner (top-left, above track headers) - STICKY                   -->
-        <!-- ══════════════════════════════════════════════════════════════════ -->
-        <Border Grid.Row="1" Grid.Column="0"
+        <!-- Corner above track headers -->
+        <Border Grid.Row="1" Grid.Column="2"
                 Background="{DynamicResource PanelBg}"
                 BorderBrush="{DynamicResource BorderBrush}"
                 BorderThickness="0,0,1,1">
@@ -322,128 +357,75 @@ Background="{DynamicResource DarkBg}">
                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
         </Border>
 
-        <!-- ══════════════════════════════════════════════════════════════════ -->
-        <!-- Ruler (horizontally scrollable, synced with timeline)             -->
-        <!-- ══════════════════════════════════════════════════════════════════ -->
-        <ScrollViewer x:Name="RulerScrollView"
-                      Grid.Row="1" Grid.Column="1"
-                      HorizontalScrollBarVisibility="Hidden"
-                      VerticalScrollBarVisibility="Disabled"
-                      UseLayoutRounding="True"
-                      SnapsToDevicePixels="True">
-            <local:PixelPerfectRulerControl
-                x:Name="RulerControl"
-                Height="24"
-                Width="{Binding TotalTimelineWidth}"
-                PixelsPerBeat="{Binding PixelsPerBeat}"
-                BeatsPerBar="4"
-                Cursor="Hand"
-                MouseLeftButtonDown="Ruler_MouseLeftButtonDown"/>
+        <!-- Ruler -->
+        <ScrollViewer x:Name="RulerScrollView" Grid.Row="1" Grid.Column="3"
+                      HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"
+                      UseLayoutRounding="True" SnapsToDevicePixels="True">
+            <local:PixelPerfectRulerControl x:Name="RulerControl" Height="24"
+                Width="{Binding TotalTimelineWidth}" PixelsPerBeat="{Binding PixelsPerBeat}"
+                BeatsPerBar="4" Cursor="Hand" MouseLeftButtonDown="Ruler_MouseLeftButtonDown"/>
         </ScrollViewer>
 
-        <!-- ══════════════════════════════════════════════════════════════════ -->
-        <!-- STICKY Track header panel (vertically synced, no scrollbar)       -->
-        <!-- ══════════════════════════════════════════════════════════════════ -->
-        <ScrollViewer x:Name="HeaderScrollView"
-                      Grid.Row="2" Grid.Column="0"
-                      HorizontalScrollBarVisibility="Disabled"
-                      VerticalScrollBarVisibility="Hidden"
+        <!-- Track header panel -->
+        <ScrollViewer x:Name="HeaderScrollView" Grid.Row="2" Grid.Column="2"
+                      HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Hidden"
                       Background="{DynamicResource PanelBg}"
-                      BorderBrush="{DynamicResource BorderBrush}"
-                      BorderThickness="0,0,1,0"
-                      UseLayoutRounding="True"
-                      SnapsToDevicePixels="True">
-            
+                      BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0"
+                      UseLayoutRounding="True" SnapsToDevicePixels="True">
             <StackPanel>
-                <!-- Tracks -->
-                <ItemsControl ItemsSource="{Binding Tracks}"
-                              ItemTemplate="{StaticResource TrackHeaderTemplate}"
+                <ItemsControl ItemsSource="{Binding Tracks}" ItemTemplate="{StaticResource TrackHeaderTemplate}"
                               VirtualizingStackPanel.IsVirtualizing="True"
                               VirtualizingStackPanel.VirtualizationMode="Recycling">
                     <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <VirtualizingStackPanel/>
-                        </ItemsPanelTemplate>
+                        <ItemsPanelTemplate><VirtualizingStackPanel/></ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                 </ItemsControl>
-                
-                <!-- Add Track Button at bottom -->
-                <Border Background="{DynamicResource DropdownBg}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="4,2">
-                    <Button Content="+ Track hinzufügen"
-                            Command="{Binding AddEmptyTrackCommand}"
-                            Style="{StaticResource ArrangeBtn}"
-                            HorizontalAlignment="Stretch"
-                            FontSize="10"
-                            Height="24"
-                            ToolTip="Neuen leeren Track hinzufügen"/>
+                <Border Background="{DynamicResource DropdownBg}" BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="0,1,0,0" Padding="4,2">
+                    <Button Content="+ Track hinzufügen" Command="{Binding AddEmptyTrackCommand}"
+                            Style="{StaticResource ArrangeBtn}" HorizontalAlignment="Stretch"
+                            FontSize="10" Height="24" ToolTip="Neuen leeren Track hinzufügen"/>
                 </Border>
             </StackPanel>
         </ScrollViewer>
 
-        <!-- ══════════════════════════════════════════════════════════════════ -->
-        <!-- MAIN TIMELINE ScrollViewer (single vertical scrollbar)            -->
-        <!--   ① TimelineGridControl  — DrawingVisual background              -->
-        <!--   ② Track lane rows      — virtualized ItemsControl               -->
-        <!--   ③ Playhead overlay     — Canvas rectangle, no hit-test          -->
-        <!-- ══════════════════════════════════════════════════════════════════ -->
-        <ScrollViewer x:Name="TimelineScrollView"
-                      Grid.Row="2" Grid.Column="1"
-                      HorizontalScrollBarVisibility="Auto"
-                      VerticalScrollBarVisibility="Auto"
+        <!-- Main timeline -->
+        <ScrollViewer x:Name="TimelineScrollView" Grid.Row="2" Grid.Column="3"
+                      HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
                       Background="{DynamicResource DarkBg}"
                       ScrollChanged="TimelineScrollView_ScrollChanged"
                       PreviewMouseWheel="TimelineScrollView_PreviewMouseWheel"
                       PreviewMouseRightButtonDown="TimelineScrollView_PreviewMouseRightButtonDown"
                       PreviewMouseMove="TimelineScrollView_PreviewMouseMove"
                       PreviewMouseRightButtonUp="TimelineScrollView_PreviewMouseRightButtonUp"
-                      UseLayoutRounding="True"
-                      SnapsToDevicePixels="True"
+                      UseLayoutRounding="True" SnapsToDevicePixels="True"
                       SizeChanged="TimelineScrollView_SizeChanged"
                       AllowDrop="True"
                       DragEnter="TimelineScrollView_DragEnter"
                       DragOver="TimelineScrollView_DragOver"
                       Drop="TimelineScrollView_Drop">
 
-            <!-- Fixed-size canvas matching total timeline dimensions -->
             <Grid x:Name="TimelineGrid"
-                  Width="{Binding TotalTimelineWidth}"
-                  Height="{Binding TotalTimelineHeight}"
-                  Background="Transparent"
-                  UseLayoutRounding="True"
-                  SnapsToDevicePixels="True"
-                  MouseDown="TimelineGrid_MouseDown"
-                  VerticalAlignment="Top"
-                  >
+                  Width="{Binding TotalTimelineWidth}" Height="{Binding TotalTimelineHeight}"
+                  Background="Transparent" UseLayoutRounding="True" SnapsToDevicePixels="True"
+                  MouseDown="TimelineGrid_MouseDown" VerticalAlignment="Top">
 
-                <!-- ① Background grid (beat lines + track separators) -->
                 <local:PixelPerfectTimelineGridControl
-                    PixelsPerBeat="{Binding PixelsPerBeat}"
-                    TrackHeight="{Binding CurrentTrackHeight}"
-                    TrackCount="{Binding Tracks.Count}"
-                    BeatsPerBar="4"
-                    IsHitTestVisible="False"/>
+                    PixelsPerBeat="{Binding PixelsPerBeat}" TrackHeight="{Binding CurrentTrackHeight}"
+                    TrackCount="{Binding Tracks.Count}" BeatsPerBar="4" IsHitTestVisible="False"/>
 
-                <!-- ② Track lane rows (100+ track virtualization) -->
                 <ItemsControl ItemsSource="{Binding Tracks}"
                               VirtualizingStackPanel.IsVirtualizing="True"
                               VirtualizingStackPanel.VirtualizationMode="Recycling"
-                              UseLayoutRounding="True"
-                              SnapsToDevicePixels="True">
+                              UseLayoutRounding="True" SnapsToDevicePixels="True">
                     <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <VirtualizingStackPanel/>
-                        </ItemsPanelTemplate>
+                        <ItemsPanelTemplate><VirtualizingStackPanel/></ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="{x:Type vm:ArrangementTrackViewModel}">
-
-                            <!-- Lane row — click to add clip, clips float on Canvas -->
                             <Border Height="{Binding DataContext.CurrentTrackHeight, RelativeSource={RelativeSource AncestorType=local:ArrangementView}}"
-                                    BorderBrush="{DynamicResource ControlBg}"
-                                    BorderThickness="0,0,0,1"
-                                    UseLayoutRounding="True"
-                                    SnapsToDevicePixels="True"
-                                    MouseDown="TrackLane_MouseDown">
+                                    BorderBrush="{DynamicResource ControlBg}" BorderThickness="0,0,0,1"
+                                    UseLayoutRounding="True" SnapsToDevicePixels="True" MouseDown="TrackLane_MouseDown">
                                 <Border.Style>
                                     <Style TargetType="Border">
                                         <Setter Property="Background" Value="Transparent"/>
@@ -454,15 +436,9 @@ Background="{DynamicResource DarkBg}">
                                         </Style.Triggers>
                                     </Style>
                                 </Border.Style>
-
-                                <!-- Clip canvas for this track -->
-                                <ItemsControl ItemsSource="{Binding Clips}"
-                                              UseLayoutRounding="True"
-                                              SnapsToDevicePixels="True">
+                                <ItemsControl ItemsSource="{Binding Clips}" UseLayoutRounding="True" SnapsToDevicePixels="True">
                                     <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <Canvas UseLayoutRounding="True" SnapsToDevicePixels="True"/>
-                                        </ItemsPanelTemplate>
+                                        <ItemsPanelTemplate><Canvas UseLayoutRounding="True" SnapsToDevicePixels="True"/></ItemsPanelTemplate>
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemContainerStyle>
                                         <Style TargetType="ContentPresenter">
@@ -475,71 +451,36 @@ Background="{DynamicResource DarkBg}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:ArrangementClipViewModel}">
                                             <local:ClipControl Width="{Binding PixelWidth}"
-                                                               Height="{Binding DataContext.ClipHeight, RelativeSource={RelativeSource AncestorType=local:ArrangementView}}"
-                                                               UseLayoutRounding="True"
-                                                               SnapsToDevicePixels="True"/>
+                                                Height="{Binding DataContext.ClipHeight, RelativeSource={RelativeSource AncestorType=local:ArrangementView}}"
+                                                UseLayoutRounding="True" SnapsToDevicePixels="True"/>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
                             </Border>
-
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <!-- ③ Playhead needle (interactive overlay for seeking) -->
-                <Canvas UseLayoutRounding="True"
-                        SnapsToDevicePixels="True">
-                    <!-- Invisible hit test area for easier clicking -->
+                <Canvas UseLayoutRounding="True" SnapsToDevicePixels="True">
                     <Rectangle x:Name="PlayheadHitArea"
-                               Canvas.Left="{Binding PlayheadPixel}"
-                               Canvas.Top="0"
-                               Width="10"
-                               Height="{Binding TotalTimelineHeight}"
-                               Fill="Transparent"
-                               Margin="-5,0,0,0"
-                               Cursor="Hand"
-                               MouseDown="Playhead_MouseDown"
-                               MouseMove="Playhead_MouseMove"
-                               MouseUp="Playhead_MouseUp"
-                               UseLayoutRounding="True"
-                               SnapsToDevicePixels="True"/>
-                    
-                    <!-- Playhead triangle indicator at top -->
-                    <Path x:Name="PlayheadTriangle"
-                          Canvas.Left="{Binding PlayheadPixel}"
-                          Canvas.Top="0"
-                          Fill="#E63946"
-                          Data="M -5,0 L 5,0 L 0,8 Z"
-                          UseLayoutRounding="True"
-                          SnapsToDevicePixels="True"/>
-                    
-                    <!-- Playhead vertical line -->
-                    <Rectangle x:Name="PlayheadLine"
-                               Canvas.Left="{Binding PlayheadPixel}"
-                               Canvas.Top="0"
-                               Width="1.5"
-                               Height="{Binding TotalTimelineHeight}"
-                               Fill="#E63946"
-                               UseLayoutRounding="True"
-                               SnapsToDevicePixels="True"/>
+                               Canvas.Left="{Binding PlayheadPixel}" Canvas.Top="0"
+                               Width="10" Height="{Binding TotalTimelineHeight}"
+                               Fill="Transparent" Margin="-5,0,0,0" Cursor="Hand"
+                               MouseDown="Playhead_MouseDown" MouseMove="Playhead_MouseMove" MouseUp="Playhead_MouseUp"
+                               UseLayoutRounding="True" SnapsToDevicePixels="True"/>
+                    <Path x:Name="PlayheadTriangle" Canvas.Left="{Binding PlayheadPixel}" Canvas.Top="0"
+                          Fill="#E63946" Data="M -5,0 L 5,0 L 0,8 Z" UseLayoutRounding="True" SnapsToDevicePixels="True"/>
+                    <Rectangle x:Name="PlayheadLine" Canvas.Left="{Binding PlayheadPixel}" Canvas.Top="0"
+                               Width="1.5" Height="{Binding TotalTimelineHeight}" Fill="#E63946"
+                               UseLayoutRounding="True" SnapsToDevicePixels="True"/>
                 </Canvas>
 
-                <!-- ④ Zoom selection rectangle (Ctrl+RightClick drag) -->
-                <Canvas IsHitTestVisible="False"
-                        UseLayoutRounding="True"
-                        SnapsToDevicePixels="True">
-                    <Border x:Name="ZoomSelectionRect"
-                            Visibility="Collapsed"
-                            Background="#185BA4E6"
-                            BorderBrush="#5BA4E6"
-                            BorderThickness="1"
-                            CornerRadius="1"
-                            IsHitTestVisible="False"/>
+                <Canvas IsHitTestVisible="False" UseLayoutRounding="True" SnapsToDevicePixels="True">
+                    <Border x:Name="ZoomSelectionRect" Visibility="Collapsed"
+                            Background="#185BA4E6" BorderBrush="#5BA4E6"
+                            BorderThickness="1" CornerRadius="1" IsHitTestVisible="False"/>
                 </Canvas>
-
             </Grid>
         </ScrollViewer>
-
     </Grid>
 </UserControl>

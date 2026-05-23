@@ -135,9 +135,48 @@ public sealed class AudioBrowserViewModel : INotifyPropertyChanged, IDisposable
     public ICommand StopPreviewCommand { get; private set; } = null!;
     public ICommand GoBackCommand      { get; private set; } = null!;
     public ICommand GoForwardCommand   { get; private set; } = null!;
-    public ICommand GoToMusicFolderCommand { get; private set; } = null!;
-    public ICommand GoToDesktopCommand { get; private set; } = null!;
-    public ICommand AddToFavoritesCommand { get; private set; } = null!;
+    public ICommand GoToMusicFolderCommand   { get; private set; } = null!;
+    public ICommand GoToDesktopCommand       { get; private set; } = null!;
+    public ICommand AddToFavoritesCommand    { get; private set; } = null!;
+    public ICommand GoToDefaultPathCommand   { get; private set; } = null!;
+
+    // ── Default-path properties ───────────────────────────────────────────
+
+    private string _defaultPath = string.Empty;
+
+    /// <summary>
+    /// The user-configured default Audio Browser path (from Settings → Allgemein).
+    /// Shown in the nav bar header and used by GoToDefaultPathCommand.
+    /// Call <see cref="ReloadDefaultPath"/> after the settings window closes.
+    /// </summary>
+    public string DefaultPath
+    {
+        get => _defaultPath;
+        private set
+        {
+            if (_defaultPath == value) return;
+            _defaultPath = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasDefaultPath));
+            OnPropertyChanged(nameof(DefaultPathLabel));
+        }
+    }
+
+    /// <summary>True when a non-empty, existing default path is configured.</summary>
+    public bool HasDefaultPath => !string.IsNullOrEmpty(_defaultPath) && Directory.Exists(_defaultPath);
+
+    /// <summary>Short display label for the button tooltip (last folder name).</summary>
+    public string DefaultPathLabel =>
+        HasDefaultPath ? Path.GetFileName(_defaultPath.TrimEnd(Path.DirectorySeparatorChar)) ?? _defaultPath : string.Empty;
+
+    /// <summary>
+    /// Re-reads the persisted default path and refreshes bound properties.
+    /// Call this after the Settings window closes so the button appears/disappears immediately.
+    /// </summary>
+    public void ReloadDefaultPath()
+    {
+        DefaultPath = LoadPersistedAudioBrowserPath();
+    }
 
     /// <summary>List of favorite folder paths.</summary>
     public List<string> FavoritePaths => _favoritePaths;
@@ -183,9 +222,12 @@ public sealed class AudioBrowserViewModel : INotifyPropertyChanged, IDisposable
         AddFolderCommand   = new RelayCommand(AddFolder);
         RefreshCommand     = new RelayCommand(() => _ = RefreshAsync());
         StopPreviewCommand = new RelayCommand(AudioPreviewService.Instance.Stop);
-        GoToMusicFolderCommand = new RelayCommand(async () => await NavigateToPathAsync(GetMusicPath()));
-        GoToDesktopCommand = new RelayCommand(async () => await NavigateToPathAsync(Environment.GetFolderPath(Environment.SpecialFolder.Desktop)));
-        AddToFavoritesCommand = new RelayCommand(AddCurrentPathToFavorites, () => !string.IsNullOrEmpty(_currentPath) && _currentPath != "This PC");
+        GoToMusicFolderCommand   = new RelayCommand(async () => await NavigateToPathAsync(GetMusicPath()));
+        GoToDesktopCommand       = new RelayCommand(async () => await NavigateToPathAsync(Environment.GetFolderPath(Environment.SpecialFolder.Desktop)));
+        AddToFavoritesCommand    = new RelayCommand(AddCurrentPathToFavorites, () => !string.IsNullOrEmpty(_currentPath) && _currentPath != "This PC");
+        GoToDefaultPathCommand   = new RelayCommand(
+            async () => { if (HasDefaultPath) await NavigateToPathAsync(_defaultPath); },
+            () => HasDefaultPath);
     }
 
     // ── Public API ────────────────────────────────────────────────────────
@@ -320,32 +362,53 @@ public sealed class AudioBrowserViewModel : INotifyPropertyChanged, IDisposable
 
     /// <summary>
     /// Initializes the file system browser with default paths.
+    /// Respects the user-configured default path from Settings → Allgemein.
     /// </summary>
     public async Task InitializeFileSystemAsync()
     {
+        // Read and expose the configured default path (drives the nav button)
+        DefaultPath = LoadPersistedAudioBrowserPath();
+
         // Initialize favorites with common locations
-        var musicPath = GetMusicPath();
-        var desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+        var musicPath     = GetMusicPath();
+        var desktopPath   = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
         var documentsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-        var downloadPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+        var downloadPath  = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
 
         _favoritePaths.Clear();
-        if (Directory.Exists(musicPath))
-            _favoritePaths.Add(musicPath);
-        if (Directory.Exists(desktopPath))
-            _favoritePaths.Add(desktopPath);
-        if (Directory.Exists(documentsPath))
-            _favoritePaths.Add(documentsPath);
-        if (Directory.Exists(downloadPath))
-            _favoritePaths.Add(downloadPath);
-
+        if (Directory.Exists(musicPath))     _favoritePaths.Add(musicPath);
+        if (Directory.Exists(desktopPath))   _favoritePaths.Add(desktopPath);
+        if (Directory.Exists(documentsPath)) _favoritePaths.Add(documentsPath);
+        if (Directory.Exists(downloadPath))  _favoritePaths.Add(downloadPath);
         OnPropertyChanged(nameof(FavoritePaths));
 
-        // Navigate to music folder by default
-        if (Directory.Exists(musicPath))
+        // Navigate: configured path > music folder > desktop
+        if (HasDefaultPath)
+            await NavigateToPathAsync(_defaultPath);
+        else if (Directory.Exists(musicPath))
             await NavigateToPathAsync(musicPath);
         else if (Directory.Exists(desktopPath))
             await NavigateToPathAsync(desktopPath);
+    }
+
+    /// <summary>
+    /// Reads the AudioBrowserDefaultPath from the persisted ui_settings.json.
+    /// Returns empty string if not set.
+    /// </summary>
+    private static string LoadPersistedAudioBrowserPath()
+    {
+        try
+        {
+            var path = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "Lapis DAW", "ui_settings.json");
+            if (!File.Exists(path)) return string.Empty;
+            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+            if (doc.RootElement.TryGetProperty("AudioBrowserDefaultPath", out var prop))
+                return prop.GetString() ?? string.Empty;
+        }
+        catch { }
+        return string.Empty;
     }
 
     private static string GetMusicPath()

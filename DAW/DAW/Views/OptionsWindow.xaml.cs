@@ -65,6 +65,10 @@ public partial class OptionsWindow : Window
         var scaleIdx = Array.IndexOf(scaleMap, _originalScale);
         UiScaleCombo.SelectedIndex = scaleIdx >= 0 ? scaleIdx : 1;
 
+        // Load persisted audio browser path
+        DefaultProjectFolder.Text = LoadPersistedString("DefaultProjectFolder", string.Empty);
+        AudioBrowserDefaultPath.Text = LoadPersistedString("AudioBrowserDefaultPath", string.Empty);
+
         // Hook live-preview events
         ThemeCombo.SelectionChanged += ThemeCombo_SelectionChanged;
         UiScaleCombo.SelectionChanged += UiScaleCombo_SelectionChanged;
@@ -155,8 +159,54 @@ public partial class OptionsWindow : Window
     }
 
     // ──────────────────────────────────────────────────────────────────
+    //  Audio Browser Default Path
+    // ──────────────────────────────────────────────────────────────────
+
+    private void BrowseAudioBrowserPath_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new System.Windows.Forms.FolderBrowserDialog
+        {
+            Description = "Standardordner für den Audio-Browser wählen",
+            ShowNewFolderButton = false,
+            SelectedPath = AudioBrowserDefaultPath.Text.Length > 0
+                ? AudioBrowserDefaultPath.Text
+                : Environment.GetFolderPath(Environment.SpecialFolder.MyMusic)
+        };
+        if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            AudioBrowserDefaultPath.Text = dlg.SelectedPath;
+    }
+
+    private void ClearAudioBrowserPath_Click(object sender, RoutedEventArgs e)
+    {
+        AudioBrowserDefaultPath.Text = string.Empty;
+    }
+
+    /// <summary>
+    /// Reads a single string value from the persisted ui_settings.json.
+    /// Returns <paramref name="defaultValue"/> when the key is missing or the file doesn't exist.
+    /// </summary>
+    private static string LoadPersistedString(string key, string defaultValue)
+    {
+        try
+        {
+            var path = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "Lapis DAW", "ui_settings.json");
+            if (!System.IO.File.Exists(path)) return defaultValue;
+            using var doc = System.Text.Json.JsonDocument.Parse(System.IO.File.ReadAllText(path));
+            if (doc.RootElement.TryGetProperty(key, out var prop))
+                return prop.GetString() ?? defaultValue;
+        }
+        catch { }
+        return defaultValue;
+    }
+
+    // ──────────────────────────────────────────────────────────────────
     //  Audio Driver
     // ──────────────────────────────────────────────────────────────────
+
+    // Buffer sizes in samples matching the XAML ComboBox items
+    private static readonly int[] BufferSizes = [64, 128, 256, 512, 1024, 2048];
 
     private void PopulateAudioDevices()
     {
@@ -170,6 +220,46 @@ public partial class OptionsWindow : Window
             OutputDeviceCombo.SelectedIndex = 0;
         else
             OutputDeviceCombo.Items.Add(new ComboBoxItem { Content = "(No output device)" });
+
+        // Reflect the engine's current buffer size in the combo
+        var engine = _vm.MixEngine;
+        int sampleRate = GetSelectedSampleRate();
+        // CurrentDesiredLatency is in ms; back-calculate to samples to find closest match
+        int currentSamples = (int)Math.Round(engine.CurrentDesiredLatency * sampleRate / 1000.0);
+        int bestIdx = 1; // default 128
+        int bestDiff = int.MaxValue;
+        for (int i = 0; i < BufferSizes.Length; i++)
+        {
+            int diff = Math.Abs(BufferSizes[i] - currentSamples);
+            if (diff < bestDiff) { bestDiff = diff; bestIdx = i; }
+        }
+        BufferSizeCombo.SelectedIndex = bestIdx;
+        UpdateLatencyDisplay();
+
+        // Live latency display when combo changes
+        BufferSizeCombo.SelectionChanged += (_, _) => UpdateLatencyDisplay();
+        DriverSampleRateCombo.SelectionChanged += (_, _) => UpdateLatencyDisplay();
+    }
+
+    private int GetSelectedSampleRate()
+    {
+        return DriverSampleRateCombo.SelectedIndex switch
+        {
+            0 => 44100,
+            1 => 48000,
+            2 => 96000,
+            _ => 44100
+        };
+    }
+
+    private void UpdateLatencyDisplay()
+    {
+        int idx = BufferSizeCombo.SelectedIndex;
+        if (idx < 0 || idx >= BufferSizes.Length) return;
+        int samples = BufferSizes[idx];
+        int sr = GetSelectedSampleRate();
+        double latencyMs = samples * 1000.0 / sr;
+        LatencyDisplay.Text = $"~{latencyMs:F1} ms  ({samples} samples @ {sr / 1000} kHz)";
     }
 
     private void TestAudioDriver_Click(object sender, RoutedEventArgs e)
@@ -341,6 +431,32 @@ public partial class OptionsWindow : Window
         if (double.TryParse(ProjectBpmBox.Text, out var bpm) && bpm > 0)
             _vm.BPM = bpm;
 
+        // Apply audio browser default path immediately
+        var audioBrowserPath = AudioBrowserDefaultPath.Text;
+        if (!string.IsNullOrEmpty(audioBrowserPath) && System.IO.Directory.Exists(audioBrowserPath))
+            _ = _vm.AudioBrowserVm.NavigateToPathAsync(audioBrowserPath);
+
+        // Apply buffer size to the audio engine
+        int bufIdx = BufferSizeCombo.SelectedIndex;
+        if (bufIdx >= 0 && bufIdx < BufferSizes.Length)
+        {
+            int bufSamples = BufferSizes[bufIdx];
+            int sampleRate = GetSelectedSampleRate();
+            try
+            {
+                _vm.MixEngine.ReconfigureBufferSize(bufSamples, sampleRate);
+                AppLogger.Instance.Info(
+                    $"Buffer size set to {bufSamples} samples " +
+                    $"({bufSamples * 1000.0 / sampleRate:F1} ms @ {sampleRate} Hz)");
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Instance.Error($"Failed to apply buffer size: {ex.Message}");
+                MessageBox.Show($"Audio-Engine konnte nicht neu konfiguriert werden:\n{ex.Message}",
+                    "Audio-Fehler", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
         // Persist settings asynchronously
         _ = PersistSettingsAsync();
 
@@ -362,6 +478,10 @@ public partial class OptionsWindow : Window
                 Theme = ThemeService.Instance.CurrentTheme,
                 Language = LocalizationService.Instance.CurrentLanguage,
                 UiScale = UiScaleCombo.SelectedIndex >= 0 ? ScaleValues[UiScaleCombo.SelectedIndex] : 1.0,
+                BufferSizeSamples = BufferSizeCombo.SelectedIndex >= 0 ? BufferSizes[BufferSizeCombo.SelectedIndex] : 256,
+                SampleRate = GetSelectedSampleRate(),
+                DefaultProjectFolder = DefaultProjectFolder.Text,
+                AudioBrowserDefaultPath = AudioBrowserDefaultPath.Text,
             });
             await System.IO.File.WriteAllTextAsync(path, json);
         }
@@ -400,6 +520,24 @@ public partial class OptionsWindow : Window
                 {
                     if (Application.Current?.MainWindow is Window main)
                         main.LayoutTransform = new ScaleTransform(s, s);
+                }, System.Windows.Threading.DispatcherPriority.Loaded);
+            }
+
+            // Restore buffer size
+            if (root.TryGetProperty("BufferSizeSamples", out var bufProp) &&
+                bufProp.TryGetInt32(out var bufSamples) && bufSamples > 0)
+            {
+                int sr = 44100;
+                if (root.TryGetProperty("SampleRate", out var srProp) &&
+                    srProp.TryGetInt32(out var srVal) && srVal > 0)
+                    sr = srVal;
+
+                Application.Current.Dispatcher.BeginInvoke(() =>
+                {
+                    if (Application.Current?.MainWindow?.DataContext is ViewModels.MainViewModel vm)
+                    {
+                        vm.MixEngine.ReconfigureBufferSize(bufSamples, sr);
+                    }
                 }, System.Windows.Threading.DispatcherPriority.Loaded);
             }
         }

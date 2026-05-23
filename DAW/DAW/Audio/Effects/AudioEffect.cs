@@ -149,10 +149,29 @@ public abstract class AudioEffect : INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
+    /// <summary>
+    /// Raises PropertyChanged.  When called from the audio thread the notification
+    /// is dispatched asynchronously to the UI thread so the audio callback never
+    /// blocks waiting for UI work.
+    /// </summary>
     protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
     {
-        // Fire on UI thread if needed
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        var handler = PropertyChanged;
+        if (handler == null) return;
+
+        var args = new PropertyChangedEventArgs(propertyName);
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+
+        if (dispatcher != null && !dispatcher.CheckAccess())
+        {
+            // Audio thread: post asynchronously, never block
+            dispatcher.BeginInvoke(() => handler(this, args),
+                System.Windows.Threading.DispatcherPriority.Background);
+        }
+        else
+        {
+            handler(this, args);
+        }
     }
 
     /// <summary>

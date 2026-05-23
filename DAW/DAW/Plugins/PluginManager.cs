@@ -44,6 +44,26 @@ public class PluginManager : INotifyPropertyChanged
     private PluginManager()
     {
         RegisterBuiltInPlugins();
+        Register(new PluginDefinition
+        {
+            Id = "lapis.spectre",
+            Name = "Spectre",
+            Category = "Saturation",
+            Icon = "✨",
+            Description = "Parallel multiband saturator with 5 bands, 11 algorithms and M/S processing",
+            Factory = () => new SpectreEffect(),
+            Tags = ["spectre", "multiband", "saturator", "enhancer", "harmonic", "exciter", "parallel", "ms"]
+        });
+        Register(new PluginDefinition
+        {
+            Id = "lapis.dragonparticle",
+            Name = "Dragon Particle",
+            Category = "Mastering",
+            Icon = "🐉",
+            Description = "Intelligent one-knob mastering: multiband compression, EQ, saturation, limiting",
+            Factory = () => new MasterEffect(),
+            Tags = ["dragon", "particle", "master", "mastering", "limiter", "compressor", "glue", "loudness", "bus"]
+        });
     }
 
     private void RegisterBuiltInPlugins()

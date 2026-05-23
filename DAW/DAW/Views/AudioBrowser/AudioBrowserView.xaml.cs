@@ -159,4 +159,13 @@ public partial class AudioBrowserView : UserControl
         vm.RequestLoadToPlaylist(fileVm.FullPath);
         e.Handled = true;
     }
+
+    // ── Default-path label click → navigate to default path ──────────────────
+
+    private async void DefaultPathLabel_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (DataContext is AudioBrowserViewModel vm && vm.HasDefaultPath)
+            await vm.NavigateToPathAsync(vm.DefaultPath);
+        e.Handled = true;
+    }
 }

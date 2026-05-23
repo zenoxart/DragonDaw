@@ -76,6 +76,11 @@ public sealed class GlobalToolbarViewModel : INotifyPropertyChanged
 
     public ICommand ToggleMonitoringCommand { get; private set; } = null!;
     public ICommand ToggleMetronomeCommand { get; private set; } = null!;
+    public ICommand BpmIncrementCommand { get; private set; } = null!;
+    public ICommand BpmDecrementCommand { get; private set; } = null!;
+    public ICommand BpmIncrementLargeCommand { get; private set; } = null!;
+    public ICommand BpmDecrementLargeCommand { get; private set; } = null!;
+    public ICommand TapTempoCommand { get; private set; } = null!;
 
     #endregion
 
@@ -102,8 +107,15 @@ public sealed class GlobalToolbarViewModel : INotifyPropertyChanged
     /// <summary>Current playback position for display.</summary>
     public TimeSpan CurrentPosition => _globalState.CurrentPosition;
 
-    /// <summary>Current BPM for display.</summary>
-    public double BPM => _globalState.BPM;
+    /// <summary>BPM settable from the toolbar text box.</summary>
+    public double BPM
+    {
+        get => _globalState.BPM;
+        set => _globalState.BPM = Math.Clamp(value, 20, 300);
+    }
+
+    /// <summary>BPM formatted as integer string for display.</summary>
+    public string BpmDisplay => $"{_globalState.BPM:F1}";
 
     /// <summary>Formatted position string for UI display.</summary>
     public string PositionDisplay => FormatTimeSpan(_globalState.CurrentPosition);
@@ -182,6 +194,38 @@ public sealed class GlobalToolbarViewModel : INotifyPropertyChanged
 
         ToggleMetronomeCommand = new RelayCommand(
             () => _transportService.SetMetronome(!_globalState.IsMetronomeEnabled));
+
+        BpmIncrementCommand      = new RelayCommand(() => BPM = _globalState.BPM + 1);
+        BpmDecrementCommand      = new RelayCommand(() => BPM = _globalState.BPM - 1);
+        BpmIncrementLargeCommand = new RelayCommand(() => BPM = _globalState.BPM + 5);
+        BpmDecrementLargeCommand = new RelayCommand(() => BPM = _globalState.BPM - 5);
+        TapTempoCommand          = new RelayCommand(RecordTap);
+    }
+
+    // ── Tap Tempo ─────────────────────────────────────────────────────────────
+
+    private readonly List<long> _tapTimes = [];
+    private System.Diagnostics.Stopwatch _tapWatch = System.Diagnostics.Stopwatch.StartNew();
+
+    private void RecordTap()
+    {
+        long now = _tapWatch.ElapsedMilliseconds;
+
+        // Reset if gap is longer than 3 seconds
+        if (_tapTimes.Count > 0 && now - _tapTimes[^1] > 3000)
+            _tapTimes.Clear();
+
+        _tapTimes.Add(now);
+
+        // Need at least 2 taps to calculate tempo
+        if (_tapTimes.Count < 2) return;
+
+        // Keep last 8 taps for averaging
+        if (_tapTimes.Count > 8) _tapTimes.RemoveAt(0);
+
+        double avgInterval = ((double)(_tapTimes[^1] - _tapTimes[0])) / (_tapTimes.Count - 1);
+        if (avgInterval > 0)
+            BPM = Math.Round(60000.0 / avgInterval, 1);
     }
 
     private void InitializeToolItems()
@@ -234,6 +278,7 @@ public sealed class GlobalToolbarViewModel : INotifyPropertyChanged
 
             case nameof(GlobalApplicationState.BPM):
                 OnPropertyChanged(nameof(BPM));
+                OnPropertyChanged(nameof(BpmDisplay));
                 break;
 
             case nameof(GlobalApplicationState.ActiveTool):

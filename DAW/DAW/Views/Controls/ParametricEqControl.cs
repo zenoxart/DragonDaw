@@ -714,4 +714,8 @@ public sealed class ParametricEqControl : FrameworkElement
         }
         return nearest;
     }
+
+    protected override Size MeasureOverride(Size av)
+        => new(Math.Max(double.IsInfinity(av.Width)  ? 600 : av.Width,  540),
+               Math.Max(double.IsInfinity(av.Height) ? 400 : av.Height, 360));
 }

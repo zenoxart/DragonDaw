@@ -66,13 +66,37 @@ public class PluginWindow : Window
         BuildUI();
     }
 
+    // Per-plugin content minimum sizes (width, height) — enforced on window AND on the control itself
+    private static (double minW, double minH) ContentMinSize(AudioEffect fx) => fx switch
+    {
+        EqualizerEffect  => (540, 360),
+        CompressorEffect => (440, 420),
+        SaturationEffect => (460, 320),
+        ReverbEffect     => (480, 490),
+        GainEffect       => (260, 270),
+        DelayEffect      => (360, 420),
+        SpectreEffect    => (SpectreControl.MinW, SpectreControl.MinH),
+        MasterEffect     => (MasterControl.MinW,  MasterControl.MinH),
+        _                => (280, 260)
+    };
+
     private void InitializeWindow()
     {
         Title = $"{Definition.Icon} {Definition.Name}";
-        Width     = Effect is EqualizerEffect ? 580 : Effect is CompressorEffect ? 480 : Effect is SaturationEffect ? 420 : 320;
-        Height    = Effect is EqualizerEffect ? 380 : Effect is CompressorEffect ? 440 : Effect is SaturationEffect ? 480 : 400;
-        MinWidth  = Effect is EqualizerEffect ? 380 : Effect is CompressorEffect ? 380 : Effect is SaturationEffect ? 340 : 280;
-        MinHeight = Effect is EqualizerEffect ? 280 : Effect is CompressorEffect ? 360 : Effect is SaturationEffect ? 400 : 200;
+
+        var (cmw, cmh) = ContentMinSize(Effect);
+
+        // Window minimum = content minimum + chrome (title ~38 + preset ~34 + enable ~44 + padding)
+        const double chromeH = 120;
+        const double chromeW = 24;
+
+        MinWidth  = cmw + chromeW;
+        MinHeight = cmh + chromeH;
+
+        // Default opening size = minimum + comfortable extra space
+        Width  = MinWidth  + 60;
+        Height = MinHeight + 40;
+
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
         Background = Brushes.Transparent;
@@ -449,56 +473,132 @@ public class PluginWindow : Window
         return btn;
     }
 
-    private ScrollViewer CreateContent()
+    private Grid CreateContent()
     {
-        var scroll = new ScrollViewer
-        {
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            Padding = new Thickness(12)
-        };
+        // Root grid: Enable-row (Auto) + control row (Star)
+        var root = new Grid();
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });             // enable toggle
+        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // plugin control
 
-        var stack = new StackPanel();
-
-        // Enable/Bypass toggle
+        // ── Enable / Bypass toggle strip ──
         var enablePanel = new Border
         {
             Background = new SolidColorBrush(PluginTheme.ControlBg),
-            CornerRadius = new CornerRadius(4),
-            Padding = new Thickness(12, 8, 12, 8),
-            Margin = new Thickness(0, 0, 0, 12)
+            BorderBrush = new SolidColorBrush(PluginTheme.Border),
+            BorderThickness = new Thickness(0, 0, 0, 1),
+            Padding = new Thickness(12, 6, 12, 6)
         };
-
         var enableGrid = new Grid();
         enableGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         enableGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
         var enableLabel = new TextBlock
         {
             Text = "Effect Enabled",
             Foreground = new SolidColorBrush(PluginTheme.TextPrimary),
-            VerticalAlignment = VerticalAlignment.Center
+            VerticalAlignment = VerticalAlignment.Center,
+            FontSize = 11
         };
-
-        var enableCheck = new CheckBox
-        {
-            IsChecked = Effect.IsEnabled,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        enableCheck.Checked += (s, e) => Effect.IsEnabled = true;
+        var enableCheck = new CheckBox { IsChecked = Effect.IsEnabled, VerticalAlignment = VerticalAlignment.Center };
+        enableCheck.Checked   += (s, e) => Effect.IsEnabled = true;
         enableCheck.Unchecked += (s, e) => Effect.IsEnabled = false;
-
         Grid.SetColumn(enableLabel, 0);
         Grid.SetColumn(enableCheck, 1);
         enableGrid.Children.Add(enableLabel);
         enableGrid.Children.Add(enableCheck);
         enablePanel.Child = enableGrid;
-        stack.Children.Add(enablePanel);
+        Grid.SetRow(enablePanel, 0);
+        root.Children.Add(enablePanel);
 
-        // Effect-specific parameters
-        AddEffectParameters(stack);
+        // ── Plugin control — fills remaining space, never shrinks below minimum ──
+        var (minW, minH) = ContentMinSize(Effect);
+        var ctrl = CreatePluginControl();
+        ctrl.MinWidth  = minW;
+        ctrl.MinHeight = minH;
 
-        scroll.Content = stack;
-        return scroll;
+        // Wrap in a Border for corner rounding; Border also enforces the min size
+        var ctrlBorder = new Border
+        {
+            MinWidth     = minW,
+            MinHeight    = minH,
+            ClipToBounds = true,
+            Child        = ctrl
+        };
+        Grid.SetRow(ctrlBorder, 1);
+        root.Children.Add(ctrlBorder);
+
+        return root;
+    }
+
+    /// <summary>Creates the bare plugin FrameworkElement (no chrome).</summary>
+    private FrameworkElement CreatePluginControl()
+    {
+        switch (Effect)
+        {
+            case EqualizerEffect eq:
+            {
+                var c = new ParametricEqControl
+                {
+                    Effect  = eq,
+                    Cursor  = Cursors.Hand,
+                    ToolTip = "Drag: Freq/Gain · Scroll: Q · Right-click: Band mode"
+                };
+                return c;
+            }
+            case CompressorEffect comp:
+            {
+                var c = new CompressorControl { Effect = comp, Cursor = Cursors.Hand,
+                    ToolTip = "Drag knobs · Click ratio · Right-click = reset" };
+                return c;
+            }
+            case ReverbEffect reverb:
+            {
+                var c = new ReverbControl { Effect = reverb, Cursor = Cursors.Hand,
+                    ToolTip = "↕ Drag · Shift = fine · Dbl-click = reset · Click mode to cycle" };
+                return c;
+            }
+            case SaturationEffect sat:
+            {
+                var c = new SaturationControl { Effect = sat, Cursor = Cursors.Hand,
+                    ToolTip = "↕ Drag knobs · Right-click = reset · Click buttons" };
+                return c;
+            }
+            case DelayEffect delay:
+            {
+                var c = new DelayControl { Effect = delay, Cursor = Cursors.Hand,
+                    ToolTip = "↕ Drag knobs · Shift = fine · Right-click = reset" };
+                return c;
+            }
+            case GainEffect gain:
+            {
+                var c = new GainControl { Effect = gain, Cursor = Cursors.Hand,
+                    ToolTip = "↕ Drag knob · Right-click = reset" };
+                return c;
+            }
+            case SpectreEffect spectre:
+            {
+                var c = new SpectreControl { Effect = spectre, Cursor = Cursors.Hand,
+                    ToolTip = "Drag nodes = Freq/Gain · Scroll = Q · Right-click node = reset · ◄► = Algo/Ch" };
+                return c;
+            }
+            case MasterEffect master:
+            {
+                var vm = new ViewModels.MasterViewModel(master);
+                var c  = new MasterControl { ViewModel = vm, Cursor = Cursors.Hand,
+                    ToolTip = "↕ Drag knobs · Shift = fine · Scroll = adjust · Right-click = reset" };
+                // Stop the meter timer when window closes
+                Closed += (_, _) => vm.StopMetering();
+                return c;
+            }
+            default:
+            {
+                // Fallback: generic sliders in a scroll viewer
+                var scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(12) };
+                var stack = new StackPanel();
+                AddEffectParameters(stack);
+                scroll.Content = stack;
+                return scroll;
+            }
+        }
     }
 
     private void AddEffectParameters(StackPanel container)
@@ -522,15 +622,39 @@ public class PluginWindow : Window
                 break;
 
             case DelayEffect delay:
-                AddSlider(container, "Time", 1, 2000, delay.DelayTime, v => delay.DelayTime = v, "ms");
-                AddSlider(container, "Feedback", 0, 0.95, delay.Feedback, v => delay.Feedback = v, "%", 100);
-                AddSlider(container, "Wet", 0, 1, delay.WetLevel, v => delay.WetLevel = v, "%", 100);
-                AddCheckbox(container, "Ping-Pong", delay.PingPong, v => delay.PingPong = v);
+                var delayCtrl = new Views.Controls.DelayControl
+                {
+                    Effect    = delay,
+                    MinHeight = 440,
+                    Margin    = new Thickness(0, 0, 0, 4),
+                    Cursor    = Cursors.Hand,
+                    ToolTip   = "↕ Drag knobs · Shift = fine · Right-click = reset · Click mode arrows to cycle"
+                };
+                container.Children.Add(new Border
+                {
+                    CornerRadius = new CornerRadius(6),
+                    Background   = new SolidColorBrush(PluginTheme.SurfaceBg),
+                    ClipToBounds = true,
+                    Child        = delayCtrl
+                });
                 break;
 
             case GainEffect gain:
-                AddSlider(container, "Gain", -24, 24, gain.Gain, v => gain.Gain = v, "dB");
-                AddCheckbox(container, "Soft Clip", gain.SoftClip, v => gain.SoftClip = v);
+                var gainCtrl = new Views.Controls.GainControl
+                {
+                    Effect = gain,
+                    MinHeight = 260,
+                    Margin = new Thickness(0, 0, 0, 4),
+                    Cursor = Cursors.Hand,
+                    ToolTip = "↕ Drag knob · Right-click = reset"
+                };
+                container.Children.Add(new Border
+                {
+                    CornerRadius = new CornerRadius(6),
+                    Background = new SolidColorBrush(PluginTheme.SurfaceBg),
+                    ClipToBounds = true,
+                    Child = gainCtrl
+                });
                 break;
         }
     }

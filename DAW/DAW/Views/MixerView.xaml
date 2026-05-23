@@ -756,7 +756,8 @@ Background="{DynamicResource DarkBg}">
             </Border>
             
             <!-- ═══ MIXER VIEW (Default) ═══ -->
-            <ScrollViewer x:Name="MixerScrollViewer" Grid.Row="2" 
+            <Grid Grid.Row="2">
+            <ScrollViewer x:Name="MixerScrollViewer"
                           HorizontalScrollBarVisibility="Auto" 
                           VerticalScrollBarVisibility="Disabled"
                           Background="{DynamicResource DarkBg}"
@@ -792,6 +793,7 @@ Background="{DynamicResource DarkBg}">
                                         Drop="MixerChannel_Drop"
                                         DragOver="MixerChannel_DragOver"
                                         DataContext="{Binding SourceTrack}"
+                                        IsSelected="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=Border, AncestorLevel=1}}"
                                         IsCompact="{Binding IsCompactMode, RelativeSource={RelativeSource AncestorType=local:MixerView}}"
                                         Height="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=ScrollViewer}}">
                                         <local:MixerChannelControl.Width>
@@ -801,21 +803,38 @@ Background="{DynamicResource DarkBg}">
                                                 </Binding.Converter>
                                             </Binding>
                                         </local:MixerChannelControl.Width>
-                                        <local:MixerChannelControl.IsSelected>
-                                            <Binding Path="IsSelected"/>
-                                        </local:MixerChannelControl.IsSelected>
                                     </local:MixerChannelControl>
                                 </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
-
-                    <!-- Routing overlay canvas: cables drawn here, scrolls with channels -->
-                    <Canvas x:Name="RoutingOverlay" IsHitTestVisible="True"
-                            VerticalAlignment="Stretch" HorizontalAlignment="Stretch"
-                            ClipToBounds="False"/>
                 </Grid>
             </ScrollViewer>
+
+            <!-- Routing overlay canvas: sits on top of the ScrollViewer, covers the full
+                 mixer area including the cable-hang space below the sockets.
+                 ClipToBounds=False so cables can hang freely without being cut off.
+                 IsHitTestVisible=False so the canvas itself never blocks mouse events on
+                 channel controls below; individual cable Paths have IsHitTestVisible=True
+                 set in code-behind so they still receive click-to-disconnect events. -->
+            <Canvas x:Name="RoutingOverlay"
+                    IsHitTestVisible="False"
+                    VerticalAlignment="Stretch"
+                    HorizontalAlignment="Stretch"
+                    ClipToBounds="False"
+                    Panel.ZIndex="10">
+                <Canvas.Style>
+                    <Style TargetType="Canvas">
+                        <Setter Property="Visibility" Value="Visible"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding ShowPatchbay, RelativeSource={RelativeSource AncestorType=local:MixerView}}" Value="True">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Canvas.Style>
+            </Canvas>
+            </Grid>
             
             <!-- ═══ PATCHBAY VIEW ═══ -->
             <controls:PatchbayView Grid.Row="2"

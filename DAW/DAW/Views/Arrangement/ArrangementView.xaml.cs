@@ -1,3 +1,5 @@
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
@@ -5,828 +7,538 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using System.Windows.Threading;
-using DAW.ViewModels;
-using DAW.Models;
+using DAW.Models.Sequencer;
 using DAW.Services;
+using DAW.ViewModels;
+using DAW.ViewModels.Sequencer;
 
 namespace DAW.Views.Arrangement;
 
-/// <summary>
-/// Code-behind for the pixel-perfect FL Studio-style Arrangement view.
-///
-/// Improvements:
-/// ────────────────
-/// • Precise scroll synchronization with ScrollSynchronizer
-/// • DPI-aware zoom handling
-/// • Pixel-snapped coordinate calculations
-/// • Optimized rendering performance
-/// </summary>
 public partial class ArrangementView : UserControl
 {
     private ScrollSynchronizer? _scrollSync;
-    private Action? _layoutSyncCleanup;
-    private bool _isPlayheadDragging = false;
-    private DispatcherTimer? _playheadTimer;
-    private DateTime _playbackStartTime;
-    private double _playbackStartBeat;
+    private Action?             _layoutSyncCleanup;
+    private bool                _isPlayheadDragging;
+    private DispatcherTimer?    _playheadTimer;
+    private DateTime            _playbackStartTime;
+    private double              _playbackStartBeat;
 
-    // Ctrl+RightClick zoom selection
-    private bool _isZoomSelecting;
-    private Point _zoomSelectOrigin;      // origin in TimelineGrid coordinates
-    private double _zoomSelectOriginBeat; // beat at drag start
-    private double _previousZoomLevel;    // for zoom-out on simple click
-    private double _zoomSelectTrackHeightBefore; // track height at drag start
+    // Zoom selection
+    private bool   _isZoomSelecting;
+    private Point  _zoomSelectOrigin;
+    private double _zoomSelectOriginBeat;
+    private double _previousZoomLevel;
+    private double _zoomSelectTrackHeightBefore;
+
+    // Pattern drag
+    private Point _patternDragStart;
+    private bool  _patternDragReady;
+
+    // ── Pattern browser flat list ──────────────────────────────────────────
+    private readonly ObservableCollection<PatternBrowserItem> _browserItems = [];
 
     private Border? ZoomRect => FindName("ZoomSelectionRect") as Border;
 
     public ArrangementView()
     {
         InitializeComponent();
-        
-        // Enable pixel-perfect rendering
-        UseLayoutRounding = true;
+        UseLayoutRounding   = true;
         SnapsToDevicePixels = true;
-        
-        Loaded += OnLoaded;
-        Unloaded += OnUnloaded;
+
+        // Wire the flat browser list to the ItemsControl immediately
+        PatternBrowserList.ItemsSource = _browserItems;
+
+        Loaded           += OnLoaded;
+        Unloaded         += OnUnloaded;
+        DataContextChanged += OnDataContextChanged;
     }
 
     private ArrangementViewModel? Vm => DataContext as ArrangementViewModel;
 
-    // ── Initialization ─────────────────────────────────────────────────────────
-    
+    // ── Lifecycle ──────────────────────────────────────────────────────────
+
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        _scrollSync = new ScrollSynchronizer(
-            TimelineScrollView,  // Main timeline ScrollViewer
-            RulerScrollView,
-            HeaderScrollView);
-            
-        // Setup robust layout synchronization
-        _layoutSyncCleanup = LayoutSynchronizer.SetupHeightSynchronization(
-            TimelineScrollView, 
-            HeaderScrollView);
-            
-        // Initial height sync
+        _scrollSync        = new ScrollSynchronizer(TimelineScrollView, RulerScrollView, HeaderScrollView);
+        _layoutSyncCleanup = LayoutSynchronizer.SetupHeightSynchronization(TimelineScrollView, HeaderScrollView);
         LayoutSynchronizer.SynchronizeHeights(TimelineScrollView, HeaderScrollView);
-        
-        // Initialize playhead timer
         InitializePlayheadTimer();
-        
-        // Subscribe to transport events
-        SubscribeToTransportEvents();
+        KeyDown += ArrangementView_KeyDown;
+
+        SubscribePatternVm(Vm?.PatternVm);
+        RebuildBrowserList();
+
+        // Sync the column width with the current visibility state
+        SyncPatternBrowserColumn();
+        if (Vm != null) Vm.PropertyChanged += ArrangementVm_PropertyChanged;
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         _scrollSync?.Dispose();
         _scrollSync = null;
-        
         _layoutSyncCleanup?.Invoke();
         _layoutSyncCleanup = null;
-        
-        // Stop and dispose playhead timer
         _playheadTimer?.Stop();
         _playheadTimer = null;
-        
-        // Unsubscribe from transport events
-        UnsubscribeFromTransportEvents();
+        KeyDown -= ArrangementView_KeyDown;
+        UnsubscribePatternVm(Vm?.PatternVm);
+        if (Vm != null) Vm.PropertyChanged -= ArrangementVm_PropertyChanged;
     }
 
-    // ── Legacy scroll synchronization (kept for fallback) ─────────────────────
+    private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.OldValue is ArrangementViewModel oldVm) UnsubscribePatternVm(oldVm.PatternVm);
+        if (e.NewValue is ArrangementViewModel newVm)
+        {
+            SubscribePatternVm(newVm.PatternVm);
+            newVm.PropertyChanged += ArrangementVm_PropertyChanged;
+        }
+        RebuildBrowserList();
+        SyncPatternBrowserColumn();
+    }
+
+    private void ArrangementVm_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ArrangementViewModel.IsPatternBrowserVisible))
+            SyncPatternBrowserColumn();
+    }
+
+    /// <summary>
+    /// Collapses or restores the pattern browser column (col 0) and splitter (col 1)
+    /// so no dead space remains when the panel is hidden.
+    /// </summary>
+    private void SyncPatternBrowserColumn()
+    {
+        var grid = Content as System.Windows.Controls.Grid;
+        if (grid == null) return;
+        bool visible = Vm?.IsPatternBrowserVisible ?? true;
+        // Col 0 = pattern browser, Col 1 = splitter
+        grid.ColumnDefinitions[0].Width = visible
+            ? new System.Windows.GridLength(160, System.Windows.GridUnitType.Pixel)
+            : new System.Windows.GridLength(0);
+        grid.ColumnDefinitions[1].Width = visible
+            ? new System.Windows.GridLength(4)
+            : new System.Windows.GridLength(0);
+    }
+
+    // ── Pattern VM subscriptions ───────────────────────────────────────────
+
+    private void SubscribePatternVm(PatternViewModel? pvm)
+    {
+        if (pvm == null) return;
+        pvm.PropertyChanged        += PatternVm_PropertyChanged;
+        pvm.AllPatterns.CollectionChanged += AllPatterns_CollectionChanged;
+        pvm.Channels.CollectionChanged    += Channels_CollectionChanged;
+    }
+
+    private void UnsubscribePatternVm(PatternViewModel? pvm)
+    {
+        if (pvm == null) return;
+        pvm.PropertyChanged        -= PatternVm_PropertyChanged;
+        pvm.AllPatterns.CollectionChanged -= AllPatterns_CollectionChanged;
+        pvm.Channels.CollectionChanged    -= Channels_CollectionChanged;
+    }
+
+    private void PatternVm_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(PatternViewModel.ActivePattern)
+                           or nameof(PatternViewModel.Channels))
+            RebuildBrowserList();
+    }
+
+    private void AllPatterns_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        => RebuildBrowserList();
+
+    private void Channels_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        => RebuildBrowserList();
+
+    // ── Flat browser list builder ──────────────────────────────────────────
+    /// <summary>
+    /// Rebuilds _browserItems from scratch:
+    ///   for each pattern → one header item
+    ///     for each channel in that pattern → one indented channel item
+    ///
+    /// This gives the FL-Studio-style tree where channels live directly
+    /// below their pattern and scroll as one contiguous list.
+    /// </summary>
+    private void RebuildBrowserList()
+    {
+        var pvm = Vm?.PatternVm;
+        _browserItems.Clear();
+        if (pvm == null) return;
+
+        var active = pvm.ActivePattern;
+
+        foreach (var pattern in pvm.AllPatterns)
+        {
+            // Pattern header row
+            _browserItems.Add(new PatternBrowserItem
+            {
+                IsPatternRow = true,
+                IsActive     = pattern == active,
+                Icon         = "▦",
+                Label        = pattern.Name,
+                Pattern      = pattern,
+            });
+
+            // Channel rows — only for the active pattern (collapsed for others)
+            // This mirrors FL Studio: you see channels of the selected pattern only.
+            if (pattern == active)
+            {
+                foreach (var ch in pvm.Channels)
+                {
+                    _browserItems.Add(new PatternBrowserItem
+                    {
+                        IsPatternRow = false,
+                        IsActive     = false,
+                        Icon         = ch.PluginIcon,
+                        Label        = ch.Name,
+                        DotColor     = ch.ChannelColor,
+                        Channel      = ch,
+                    });
+                }
+            }
+        }
+    }
+
+    // ── Browser item interaction ───────────────────────────────────────────
+
+    private void BrowserItem_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _patternDragStart = e.GetPosition(this);
+        _patternDragReady = true;
+
+        if (sender is not FrameworkElement { DataContext: PatternBrowserItem item }) return;
+
+        if (item.IsPatternRow && item.Pattern != null && Vm?.PatternVm is { } pvm)
+        {
+            pvm.ActivePattern = item.Pattern;
+            // RebuildBrowserList is triggered via PatternVm_PropertyChanged
+        }
+    }
+
+    private void BrowserItem_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_patternDragReady || e.LeftButton != MouseButtonState.Pressed) return;
+        var diff = e.GetPosition(this) - _patternDragStart;
+        if (Math.Abs(diff.X) < 6 && Math.Abs(diff.Y) < 6) return;
+        _patternDragReady = false;
+
+        if (sender is not FrameworkElement { DataContext: PatternBrowserItem item }) return;
+
+        DataObject data;
+        if (item.IsPatternRow && item.Pattern != null)
+            data = new DataObject(typeof(PatternModel), item.Pattern);
+        else if (!item.IsPatternRow && item.Channel != null)
+            data = new DataObject(typeof(ChannelViewModel), item.Channel);
+        else
+            return;
+
+        DragDrop.DoDragDrop(sender as DependencyObject ?? this, data, DragDropEffects.Copy);
+    }
+
+    // Keep old handler names for compatibility (were wired in previous XAML iterations)
+    private void PatternItem_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        => BrowserItem_MouseLeftButtonDown(sender, e);
+    private void PatternItem_MouseMove(object sender, MouseEventArgs e)
+        => BrowserItem_MouseMove(sender, e);
+    private void ChannelItem_MouseMove(object sender, MouseEventArgs e)
+        => BrowserItem_MouseMove(sender, e);
+
+    // ── Scroll synchronization ─────────────────────────────────────────────
 
     private void TimelineScrollView_ScrollChanged(object sender, ScrollChangedEventArgs e)
     {
-        // Synchronize horizontal scrolling with ruler
         if (Math.Abs(e.HorizontalChange) > 0.001)
             RulerScrollView.ScrollToHorizontalOffset(Math.Round(e.HorizontalOffset));
-            
-        // Synchronize vertical scrolling with header panel
         if (Math.Abs(e.VerticalChange) > 0.001)
             HeaderScrollView.ScrollToVerticalOffset(Math.Round(e.VerticalOffset));
     }
 
-    // ── DPI-aware zoom via Ctrl+MouseWheel ────────────────────────────────────
+    // ── Zoom via Ctrl+Scroll ───────────────────────────────────────────────
 
     private void TimelineScrollView_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
         if (Vm is null) return;
         if (!Keyboard.IsKeyDown(Key.LeftCtrl) && !Keyboard.IsKeyDown(Key.RightCtrl)) return;
-
-        // Get DPI information for precise calculations
-        var dpiScale = VisualTreeHelper.GetDpi(this);
-        
-        // Beat position under the mouse pointer before zoom (pixel-snapped)
-        var mouseCanvasX = Math.Round(e.GetPosition(TimelineGrid).X * dpiScale.DpiScaleX) / dpiScale.DpiScaleX;
-        var beatAtMouse = Vm.PixelToBeat(mouseCanvasX);
-
-        // Apply zoom step
-        Vm.ZoomLevel = e.Delta > 0
-            ? Math.Min(8.0, Vm.ZoomLevel * 1.12)
-            : Math.Max(0.1, Vm.ZoomLevel / 1.12);
-
-        // Scroll so that the same beat stays under the mouse (pixel-snapped)
-        var newPixelAtBeat = Vm.BeatToPixel(beatAtMouse);
-        var mouseViewportX = Math.Round(e.GetPosition(TimelineScrollView).X * dpiScale.DpiScaleX) / dpiScale.DpiScaleX;
-        var targetOffset = Math.Round(newPixelAtBeat - mouseViewportX);
-        
-        TimelineScrollView.ScrollToHorizontalOffset(targetOffset);
-
+        var dpi        = VisualTreeHelper.GetDpi(this);
+        var canvasX    = Math.Round(e.GetPosition(TimelineGrid).X * dpi.DpiScaleX) / dpi.DpiScaleX;
+        var beat       = Vm.PixelToBeat(canvasX);
+        Vm.ZoomLevel   = e.Delta > 0 ? Math.Min(8.0, Vm.ZoomLevel * 1.12) : Math.Max(0.1, Vm.ZoomLevel / 1.12);
+        var viewportX  = Math.Round(e.GetPosition(TimelineScrollView).X * dpi.DpiScaleX) / dpi.DpiScaleX;
+        TimelineScrollView.ScrollToHorizontalOffset(Math.Round(Vm.BeatToPixel(beat) - viewportX));
         e.Handled = true;
     }
 
-    // ── Size synchronization for layout changes ───────────────────────────────
-
     private void TimelineScrollView_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        // Enhanced size synchronization - also handled by LayoutSynchronizer but adding double protection
         if (e.HeightChanged)
-        {
             LayoutSynchronizer.SynchronizeHeights(TimelineScrollView, HeaderScrollView);
-        }
     }
 
-    // ── Track lane click → add clip ───────────────────────────────────────────
+    // ── Track lane click → add clip ────────────────────────────────────────
 
     private void TrackLane_MouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.LeftButton != MouseButtonState.Pressed) return;
-        if (Vm is null) return;
-        if (sender is not Border { DataContext: ArrangementTrackViewModel trackVm } laneBorder) return;
-
-        // Select track (Ctrl = add to selection)
-        var isCtrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
-        Vm.SelectTrack(trackVm, isCtrl);
-
-        // Ignore if the click landed on an existing clip (ClipControl handles those)
+        if (e.LeftButton != MouseButtonState.Pressed || Vm is null) return;
+        if (sender is not Border { DataContext: ArrangementTrackViewModel trackVm } lane) return;
+        Vm.SelectTrack(trackVm, (Keyboard.Modifiers & ModifierKeys.Control) != 0);
         if (!IsClickOnEmptyLane(e.OriginalSource as DependencyObject)) return;
-
-        var pos = e.GetPosition(laneBorder);
-        var beat = Vm.SnapToBeat(Math.Max(0.0, Vm.PixelToBeat(pos.X)));
+        var beat = Vm.SnapToBeat(Math.Max(0.0, Vm.PixelToBeat(e.GetPosition(lane).X)));
         trackVm.AddClipAtBeat(beat);
         e.Handled = true;
     }
 
-    /// <summary>
-    /// Returns <c>true</c> if the event source is the lane background rather than a clip.
-    /// Walks up the visual tree looking for a <see cref="ClipControl"/> ancestor.
-    /// </summary>
     private static bool IsClickOnEmptyLane(DependencyObject? source)
     {
-        var current = source;
-        while (current is not null)
-        {
-            if (current is ClipControl) return false;
-            current = VisualTreeHelper.GetParent(current);
-        }
+        for (var cur = source; cur != null; cur = VisualTreeHelper.GetParent(cur))
+            if (cur is ClipControl) return false;
         return true;
     }
 
-    // ── Drag and Drop ──────────────────────────────────────────────────────────
+    // ── Drag & drop into timeline ──────────────────────────────────────────
 
     private void TimelineScrollView_DragEnter(object sender, DragEventArgs e)
     {
         e.Effects = DragDropEffects.None;
-
-        System.Diagnostics.Debug.WriteLine($"DragEnter - HasFileDrop: {e.Data.GetDataPresent(DataFormats.FileDrop)}, HasAudioFile: {e.Data.GetDataPresent(typeof(AudioBrowserFileViewModel))}");
-
         if (e.Data.GetDataPresent(DataFormats.FileDrop))
         {
-            var files = (string[])e.Data.GetData(DataFormats.FileDrop);
-            if (files != null && files.Length > 0)
-            {
-                var firstFile = files[0];
-                var extension = System.IO.Path.GetExtension(firstFile);
-                
-                System.Diagnostics.Debug.WriteLine($"File dropped: {firstFile}, Extension: {extension}");
-                
-                if (AudioAnalysisService.IsSupportedFormat(extension))
-                {
-                    e.Effects = DragDropEffects.Copy;
-                    System.Diagnostics.Debug.WriteLine("Supported audio format detected");
-                }
-            }
+            var files = e.Data.GetData(DataFormats.FileDrop) as string[];
+            if (files?.Any(f => AudioAnalysisService.IsSupportedFormat(System.IO.Path.GetExtension(f))) == true)
+                e.Effects = DragDropEffects.Copy;
         }
-        else if (e.Data.GetDataPresent(typeof(AudioBrowserFileViewModel)))
+        else if (e.Data.GetDataPresent(typeof(AudioBrowserFileViewModel)) ||
+                 e.Data.GetDataPresent(typeof(ChannelViewModel))          ||
+                 e.Data.GetDataPresent(typeof(PatternModel)))
         {
             e.Effects = DragDropEffects.Copy;
-            System.Diagnostics.Debug.WriteLine("AudioBrowserFileViewModel detected");
         }
-
         e.Handled = true;
     }
 
     private void TimelineScrollView_DragOver(object sender, DragEventArgs e)
-    {
-        // Same logic as DragEnter
-        TimelineScrollView_DragEnter(sender, e);
-    }
+        => TimelineScrollView_DragEnter(sender, e);
 
     private async void TimelineScrollView_Drop(object sender, DragEventArgs e)
     {
-        // Mark handled immediately to prevent MainWindow's Window_Drop from also creating a track
         e.Handled = true;
-        
-        System.Diagnostics.Debug.WriteLine("=== AUDIO DROP OPERATION START ===");
-        
-        if (Vm == null) 
+        if (Vm == null) return;
+        var pos  = e.GetPosition(TimelineGrid);
+        var beat = Vm.SnapToBeat(Math.Max(0.0, Vm.PixelToBeat(pos.X)));
+
+        if (e.Data.GetDataPresent(typeof(PatternModel)))
         {
-            System.Diagnostics.Debug.WriteLine("ERROR: ViewModel is null");
+            var pattern = (PatternModel)e.Data.GetData(typeof(PatternModel));
+            if (pattern != null)
+            {
+                Vm.AddEmptyTrackCommand.Execute(null);
+                var t = Vm.Tracks.LastOrDefault();
+                if (t != null) { t.Model.Title = pattern.Name; t.AddClipAtBeat(beat); }
+            }
             return;
         }
 
-        System.Diagnostics.Debug.WriteLine($"Track count: {Vm.Tracks.Count}");
-
-        try
+        if (e.Data.GetDataPresent(typeof(ChannelViewModel)))
         {
-            var position = e.GetPosition(TimelineGrid);
-            var beat = Vm.PixelToBeat(position.X);
-            var snappedBeat = Vm.SnapToBeat(beat);
-            
-            System.Diagnostics.Debug.WriteLine($"Drop position: X={position.X:F1}, Y={position.Y:F1}");
-            System.Diagnostics.Debug.WriteLine($"Beat calculation: {beat:F2} -> snapped to {snappedBeat:F2}");
-            
-            // Determine which track was dropped on
-            var trackIndex = (int)(position.Y / Vm.CurrentTrackHeight);
-            System.Diagnostics.Debug.WriteLine($"Calculated track index: {trackIndex} (Y={position.Y} / {Vm.CurrentTrackHeight})");
-
-
-            // Collect all audio file paths from the drop
-            var audioFilePaths = new List<string>();
-
-            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            var ch = (ChannelViewModel)e.Data.GetData(typeof(ChannelViewModel));
+            if (ch != null)
             {
-                var files = (string[])e.Data.GetData(DataFormats.FileDrop);
-                if (files != null)
+                Vm.AddEmptyTrackCommand.Execute(null);
+                var t = Vm.Tracks.LastOrDefault();
+                if (t != null)
                 {
-                    foreach (var file in files)
-                    {
-                        var ext = System.IO.Path.GetExtension(file);
-                        if (AudioAnalysisService.IsSupportedFormat(ext))
-                            audioFilePaths.Add(file);
-                    }
+                    t.Model.Title    = ch.Name;
+                    t.Model.FilePath = ch.Model.SamplePath ?? string.Empty;
+                    if (!string.IsNullOrEmpty(ch.Model.SamplePath) && System.IO.File.Exists(ch.Model.SamplePath))
+                        await t.AddAudioClipAtBeatAsync(beat, ch.Model.SamplePath, Vm.BPM);
+                    else
+                        t.AddClipAtBeat(beat);
                 }
             }
-            else if (e.Data.GetDataPresent(typeof(AudioBrowserFileViewModel)))
-            {
-                var audioFile = (AudioBrowserFileViewModel)e.Data.GetData(typeof(AudioBrowserFileViewModel));
-                audioFilePaths.Add(audioFile.FullPath);
-            }
-
-            if (audioFilePaths.Count == 0)
-            {
-                System.Diagnostics.Debug.WriteLine("ERROR: No supported audio files found in drop data");
-                return;
-            }
-
-            System.Diagnostics.Debug.WriteLine($"Processing {audioFilePaths.Count} audio file(s)");
-
-            // Process each file — one track per file
-            for (int i = 0; i < audioFilePaths.Count; i++)
-            {
-                var audioFilePath = audioFilePaths[i];
-                var currentTrackIndex = trackIndex + i;
-
-                System.Diagnostics.Debug.WriteLine($"File {i + 1}/{audioFilePaths.Count}: {System.IO.Path.GetFileName(audioFilePath)}");
-
-                // Auto-create a new track if needed
-                bool trackWasAutoCreated = false;
-                if (currentTrackIndex < 0 || currentTrackIndex >= Vm.Tracks.Count)
-                {
-                    System.Diagnostics.Debug.WriteLine($"Track index {currentTrackIndex} out of range. Creating new track.");
-                    Vm.AddEmptyTrackCommand.Execute(null);
-                    currentTrackIndex = Vm.Tracks.Count - 1;
-                    trackWasAutoCreated = true;
-
-                    if (currentTrackIndex < 0)
-                    {
-                        System.Diagnostics.Debug.WriteLine("ERROR: Failed to create new track.");
-                        continue;
-                    }
-                }
-
-                var targetTrack = Vm.Tracks[currentTrackIndex];
-                System.Diagnostics.Debug.WriteLine($"Target track: '{targetTrack.Name}'");
-
-                // Rename auto-created track to match the audio file
-                if (trackWasAutoCreated)
-                {
-                    targetTrack.Model.Title = System.IO.Path.GetFileNameWithoutExtension(audioFilePath);
-                    targetTrack.Model.FilePath = audioFilePath;
-                }
-                else if (string.IsNullOrEmpty(targetTrack.Model.FilePath))
-                {
-                    targetTrack.Model.FilePath = audioFilePath;
-                }
-
-                System.Diagnostics.Debug.WriteLine($"Creating audio clip for: {System.IO.Path.GetFileName(audioFilePath)}");
-                System.Diagnostics.Debug.WriteLine($"Current BPM: {Vm.BPM}");
-
-                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-                await targetTrack.AddAudioClipAtBeatAsync(snappedBeat, audioFilePath, Vm.BPM);
-                stopwatch.Stop();
-
-                System.Diagnostics.Debug.WriteLine($"Audio clip created successfully in {stopwatch.ElapsedMilliseconds}ms");
-                System.Diagnostics.Debug.WriteLine($"Total clips in track: {targetTrack.Clips.Count}");
-            }
+            return;
         }
-        catch (Exception ex)
+
+        var trackIdx = (int)(pos.Y / Vm.CurrentTrackHeight);
+        var paths    = new List<string>();
+        if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            foreach (var f in (string[])e.Data.GetData(DataFormats.FileDrop))
+                if (AudioAnalysisService.IsSupportedFormat(System.IO.Path.GetExtension(f))) paths.Add(f);
+        else if (e.Data.GetDataPresent(typeof(AudioBrowserFileViewModel)))
+            paths.Add(((AudioBrowserFileViewModel)e.Data.GetData(typeof(AudioBrowserFileViewModel))).FullPath);
+
+        for (int i = 0; i < paths.Count; i++)
         {
-            System.Diagnostics.Debug.WriteLine($"EXCEPTION in audio drop: {ex.GetType().Name}: {ex.Message}");
-            System.Diagnostics.Debug.WriteLine($"Stack trace: {ex.StackTrace}");
-        }
-        finally
-        {
-            System.Diagnostics.Debug.WriteLine("=== AUDIO DROP OPERATION END ===");
+            var idx = trackIdx + i;
+            bool created = idx < 0 || idx >= Vm.Tracks.Count;
+            if (created) { Vm.AddEmptyTrackCommand.Execute(null); idx = Vm.Tracks.Count - 1; }
+            var t = Vm.Tracks[idx];
+            if (created) { t.Model.Title = System.IO.Path.GetFileNameWithoutExtension(paths[i]); t.Model.FilePath = paths[i]; }
+            else if (string.IsNullOrEmpty(t.Model.FilePath)) t.Model.FilePath = paths[i];
+            await t.AddAudioClipAtBeatAsync(beat, paths[i], Vm.BPM);
         }
     }
 
-    // ── Playhead animation and timing ─────────────────────────────────────────
+    // ── Playhead ───────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Initializes the playhead timer for automatic playback
-    /// </summary>
     private void InitializePlayheadTimer()
     {
-        _playheadTimer = new DispatcherTimer
+        _playheadTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+        _playheadTimer.Tick += (_, _) =>
         {
-            Interval = TimeSpan.FromMilliseconds(16) // ~60 FPS for smooth playhead movement
+            if (Vm == null || _isPlayheadDragging || !IsPlaying) return;
+            Vm.PlayheadBeat = _playbackStartBeat + (DateTime.Now - _playbackStartTime).TotalSeconds * (Vm.BPM / 60.0);
+            var px = Vm.PlayheadPixel; var vw = TimelineScrollView.ViewportWidth; var off = TimelineScrollView.HorizontalOffset;
+            if      (px < off + 50)      TimelineScrollView.ScrollToHorizontalOffset(Math.Max(0, px - 100));
+            else if (px > off + vw - 50) TimelineScrollView.ScrollToHorizontalOffset(px - vw + 100);
         };
-        _playheadTimer.Tick += PlayheadTimer_Tick;
     }
 
-    /// <summary>
-    /// Subscribes to transport events from the main view model
-    /// </summary>
-    private void SubscribeToTransportEvents()
-    {
-        // For now, we'll implement a simple keyboard shortcut system
-        // TODO: Connect to actual transport service when available
-        this.KeyDown += ArrangementView_KeyDown;
-    }
-
-    /// <summary>
-    /// Unsubscribes from transport events
-    /// </summary>
-    private void UnsubscribeFromTransportEvents()
-    {
-        this.KeyDown -= ArrangementView_KeyDown;
-    }
-
-    /// <summary>
-    /// Handles keyboard shortcuts for transport control
-    /// </summary>
-    private void ArrangementView_KeyDown(object sender, KeyEventArgs e)
-    {
-        switch (e.Key)
-        {
-            case Key.Space:
-                IsPlaying = !IsPlaying;
-                e.Handled = true;
-                break;
-            case Key.Home:
-                SeekToBeat(0);
-                e.Handled = true;
-                break;
-            case Key.End:
-                if (Vm != null)
-                    SeekToBeat(256 * 4); // TotalBars * BeatsPerBar
-                e.Handled = true;
-                break;
-        }
-    }
-
-    /// <summary>
-    /// Timer tick handler to update playhead position during playback
-    /// </summary>
-    private void PlayheadTimer_Tick(object? sender, EventArgs e)
-    {
-        if (Vm == null || _isPlayheadDragging) return;
-
-        // TODO: Replace with actual audio engine playback state
-        // For now, we'll simulate playback based on transport commands
-        if (IsPlaying)
-        {
-            var elapsed = DateTime.Now - _playbackStartTime;
-            var beatsPerSecond = Vm.BPM / 60.0;
-            var currentBeat = _playbackStartBeat + (elapsed.TotalSeconds * beatsPerSecond);
-            
-            // Update playhead position
-            Vm.PlayheadBeat = currentBeat;
-            
-            // Auto-scroll to keep playhead visible
-            AutoScrollToPlayhead();
-        }
-    }
-
-    /// <summary>
-    /// Automatically scrolls the timeline to keep the playhead visible
-    /// </summary>
-    private void AutoScrollToPlayhead()
-    {
-        if (Vm == null) return;
-
-        var playheadPixel = Vm.PlayheadPixel;
-        var viewportWidth = TimelineScrollView.ViewportWidth;
-        var currentOffset = TimelineScrollView.HorizontalOffset;
-        
-        // Check if playhead is outside visible area
-        if (playheadPixel < currentOffset + 50) // Left margin
-        {
-            TimelineScrollView.ScrollToHorizontalOffset(Math.Max(0, playheadPixel - 100));
-        }
-        else if (playheadPixel > currentOffset + viewportWidth - 50) // Right margin
-        {
-            TimelineScrollView.ScrollToHorizontalOffset(playheadPixel - viewportWidth + 100);
-        }
-    }
-
-    // ── Transport control integration ─────────────────────────────────────────
-
-    private bool _isPlaying = false;
-    
-    /// <summary>
-    /// Gets or sets whether playback is currently active
-    /// </summary>
+    private bool _isPlaying;
     public bool IsPlaying
     {
         get => _isPlaying;
         set
         {
-            if (_isPlaying != value)
-            {
-                _isPlaying = value;
-                if (_isPlaying)
-                {
-                    StartPlayback();
-                }
-                else
-                {
-                    StopPlayback();
-                }
-            }
+            if (_isPlaying == value) return;
+            _isPlaying = value;
+            if (_isPlaying) { _playbackStartTime = DateTime.Now; _playbackStartBeat = Vm?.PlayheadBeat ?? 0; _playheadTimer?.Start(); }
+            else            { _playheadTimer?.Stop(); }
         }
     }
 
-    /// <summary>
-    /// Starts playback and playhead animation
-    /// </summary>
-    private void StartPlayback()
-    {
-        if (Vm == null) return;
-
-        _playbackStartTime = DateTime.Now;
-        _playbackStartBeat = Vm.PlayheadBeat;
-        _playheadTimer?.Start();
-        
-        // TODO: Start audio engine playback
-        // audioEngine.Play();
-    }
-
-    /// <summary>
-    /// Stops playback and playhead animation
-    /// </summary>
-    private void StopPlayback()
-    {
-        _playheadTimer?.Stop();
-        
-        // TODO: Stop audio engine playback
-        // audioEngine.Stop();
-    }
-
-    /// <summary>
-    /// Seeks to a specific beat position and updates playback state
-    /// </summary>
     public void SeekToBeat(double beat)
     {
         if (Vm == null) return;
-
         Vm.PlayheadBeat = beat;
-        
-        if (_isPlaying)
-        {
-            // Update playback start time for continuous playback
-            _playbackStartTime = DateTime.Now;
-            _playbackStartBeat = beat;
-        }
-        
-        // TODO: Seek audio engine
-        // audioEngine.Seek(TimeSpan.FromSeconds(beat * 60.0 / Vm.BPM));
+        if (_isPlaying) { _playbackStartTime = DateTime.Now; _playbackStartBeat = beat; }
     }
 
-    // ── Ruler click (seek to position) ───────────────────────────────────────
+    private void ArrangementView_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Space) { IsPlaying = !IsPlaying; e.Handled = true; }
+        else if (e.Key == Key.Home) { SeekToBeat(0); e.Handled = true; }
+    }
 
-    /// <summary>
-    /// Clicking the ruler sets the playhead to the clicked position.
-    /// </summary>
     private void Ruler_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (Vm == null) return;
-
-        var clickX = e.GetPosition(RulerControl).X;
-        var point = new Point(Math.Max(0, clickX), 0);
-        UpdatePlayheadPosition(point);
+        UpdatePlayheadPos(new Point(Math.Max(0, e.GetPosition(RulerControl).X), 0));
         e.Handled = true;
     }
 
-    // ── Playhead interaction (seeking) ────────────────────────────────────────
-
-    /// <summary>
-    /// Handles mouse down on the playhead for dragging/seeking
-    /// </summary>
     private void Playhead_MouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.ChangedButton == MouseButton.Left && Vm != null)
-        {
-            _isPlayheadDragging = true;
-            
-            // Capture mouse to handle dragging outside the control
-            var playheadArea = sender as FrameworkElement;
-            playheadArea?.CaptureMouse();
-            
-            // Visual feedback - make playhead slightly larger/brighter during drag
-            UpdatePlayheadDragVisuals(true);
-            
-            // Update playhead position immediately
-            UpdatePlayheadPosition(e.GetPosition(TimelineGrid));
-            
-            e.Handled = true;
-        }
+        if (e.ChangedButton != MouseButton.Left || Vm == null) return;
+        _isPlayheadDragging = true;
+        (sender as FrameworkElement)?.CaptureMouse();
+        SetPlayheadDragVisuals(true);
+        UpdatePlayheadPos(e.GetPosition(TimelineGrid));
+        e.Handled = true;
     }
 
-    /// <summary>
-    /// Handles mouse move during playhead dragging
-    /// </summary>
     private void Playhead_MouseMove(object sender, MouseEventArgs e)
     {
-        if (_isPlayheadDragging && e.LeftButton == MouseButtonState.Pressed && Vm != null)
-        {
-            UpdatePlayheadPosition(e.GetPosition(TimelineGrid));
-            e.Handled = true;
-        }
+        if (!_isPlayheadDragging || e.LeftButton != MouseButtonState.Pressed) return;
+        UpdatePlayheadPos(e.GetPosition(TimelineGrid));
+        e.Handled = true;
     }
 
-    /// <summary>
-    /// Handles mouse up to end playhead dragging
-    /// </summary>
     private void Playhead_MouseUp(object sender, MouseButtonEventArgs e)
     {
-        if (_isPlayheadDragging)
-        {
-            _isPlayheadDragging = false;
-            
-            // Release mouse capture
-            var playheadArea = sender as FrameworkElement;
-            playheadArea?.ReleaseMouseCapture();
-            
-            // Reset visual feedback
-            UpdatePlayheadDragVisuals(false);
-            
-            e.Handled = true;
-        }
+        if (!_isPlayheadDragging) return;
+        _isPlayheadDragging = false;
+        (sender as FrameworkElement)?.ReleaseMouseCapture();
+        SetPlayheadDragVisuals(false);
+        e.Handled = true;
     }
 
-    /// <summary>
-    /// Updates the playhead position based on mouse coordinates
-    /// </summary>
-    private void UpdatePlayheadPosition(Point mousePosition)
+    private void UpdatePlayheadPos(Point p)
     {
         if (Vm == null) return;
-
-        // Convert mouse X position to beat position
-        var clampedX = Math.Max(0, Math.Min(mousePosition.X, Vm.TotalTimelineWidth));
-        var beatPosition = Vm.PixelToBeat(clampedX);
-        
-        // Snap to grid if snapping is enabled
-        if (Vm.SnapResolution > 0)
-        {
-            beatPosition = Math.Round(beatPosition / Vm.SnapResolution) * Vm.SnapResolution;
-        }
-        
-        // Update the playhead position
-        Vm.PlayheadBeat = beatPosition;
-        
-        // TODO: If you have an audio engine, seek to this position
-        // audioEngine.Seek(TimeSpan.FromSeconds(beatPosition * 60.0 / Vm.BPM));
-        
-        SeekToBeat(beatPosition);
+        var beat = Vm.PixelToBeat(Math.Max(0, Math.Min(p.X, Vm.TotalTimelineWidth)));
+        if (Vm.SnapResolution > 0) beat = Math.Round(beat / Vm.SnapResolution) * Vm.SnapResolution;
+        SeekToBeat(beat);
     }
 
-    /// <summary>
-    /// Updates playhead visuals during drag operations
-    /// </summary>
-    private void UpdatePlayheadDragVisuals(bool isDragging)
+    private void SetPlayheadDragVisuals(bool drag)
     {
-        if (FindName("PlayheadTriangle") is Path triangle && FindName("PlayheadLine") is Rectangle line)
-        {
-            if (isDragging)
-            {
-                // Make playhead more visible during dragging
-                triangle.Fill = new SolidColorBrush(Color.FromRgb(255, 99, 99)); // Brighter red
-                line.Fill = new SolidColorBrush(Color.FromRgb(255, 99, 99));
-                line.Width = 2.0; // Slightly thicker
-            }
-            else
-            {
-                // Reset to normal appearance
-                triangle.Fill = new SolidColorBrush(Color.FromRgb(230, 57, 70)); // Dragon red
-                line.Fill = new SolidColorBrush(Color.FromRgb(230, 57, 70));
-                line.Width = 1.5;
-            }
-        }
+        var col = drag ? Color.FromRgb(255, 99, 99) : Color.FromRgb(230, 57, 70);
+        var b   = new SolidColorBrush(col);
+        if (FindName("PlayheadTriangle") is Path tri)   tri.Fill  = b;
+        if (FindName("PlayheadLine")     is System.Windows.Shapes.Rectangle ln) { ln.Fill = b; ln.Width = drag ? 2.0 : 1.5; }
     }
 
-    // ── Timeline click-to-seek functionality ──────────────────────────────────
+    private void TimelineGrid_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton == MouseButton.Left && Vm != null)
+        { UpdatePlayheadPos(e.GetPosition(TimelineGrid)); e.Handled = true; }
+    }
 
-    // ── Ctrl+RightClick zoom (FL Studio style) ──────────────────────────────
+    // ── Ctrl+RightClick zoom ───────────────────────────────────────────────
 
-    /// <summary>
-    /// Ctrl+RightClick starts a zoom selection rectangle.
-    /// </summary>
     private void TimelineScrollView_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (Vm is null) return;
-        if (!Keyboard.IsKeyDown(Key.LeftCtrl) && !Keyboard.IsKeyDown(Key.RightCtrl)) return;
-
-        _isZoomSelecting = true;
-        _zoomSelectOrigin = e.GetPosition(TimelineGrid);
-        _zoomSelectOriginBeat = Vm.PixelToBeat(_zoomSelectOrigin.X);
-        _previousZoomLevel = Vm.ZoomLevel;
+        if (Vm is null || (!Keyboard.IsKeyDown(Key.LeftCtrl) && !Keyboard.IsKeyDown(Key.RightCtrl))) return;
+        _isZoomSelecting             = true;
+        _zoomSelectOrigin            = e.GetPosition(TimelineGrid);
+        _zoomSelectOriginBeat        = Vm.PixelToBeat(_zoomSelectOrigin.X);
+        _previousZoomLevel           = Vm.ZoomLevel;
         _zoomSelectTrackHeightBefore = Vm.CurrentTrackHeight;
-
-        // Show & initialise the selection rectangle at zero size
-        var rect = ZoomRect;
-        if (rect is null) return;
-        Canvas.SetLeft(rect, _zoomSelectOrigin.X);
-        Canvas.SetTop(rect, _zoomSelectOrigin.Y);
-        rect.Width = 0;
-        rect.Height = 0;
-        rect.Visibility = Visibility.Visible;
-
+        if (ZoomRect is { } r) { Canvas.SetLeft(r, _zoomSelectOrigin.X); Canvas.SetTop(r, _zoomSelectOrigin.Y); r.Width = 0; r.Height = 0; r.Visibility = Visibility.Visible; }
         TimelineScrollView.CaptureMouse();
         e.Handled = true;
     }
 
-    /// <summary>
-    /// Updates the zoom selection rectangle while dragging.
-    /// </summary>
     private void TimelineScrollView_PreviewMouseMove(object sender, MouseEventArgs e)
     {
         if (!_isZoomSelecting) return;
-
-        var current = e.GetPosition(TimelineGrid);
-
-        var x = Math.Min(_zoomSelectOrigin.X, current.X);
-        var y = Math.Min(_zoomSelectOrigin.Y, current.Y);
-        var w = Math.Abs(current.X - _zoomSelectOrigin.X);
-        var h = Math.Abs(current.Y - _zoomSelectOrigin.Y);
-
-        var rect = ZoomRect;
-        if (rect is null) return;
-        Canvas.SetLeft(rect, x);
-        Canvas.SetTop(rect, y);
-        rect.Width = w;
-        rect.Height = h;
+        var c = e.GetPosition(TimelineGrid);
+        if (ZoomRect is { } r) { Canvas.SetLeft(r, Math.Min(_zoomSelectOrigin.X, c.X)); Canvas.SetTop(r, Math.Min(_zoomSelectOrigin.Y, c.Y)); r.Width = Math.Abs(c.X - _zoomSelectOrigin.X); r.Height = Math.Abs(c.Y - _zoomSelectOrigin.Y); }
     }
 
-    /// <summary>
-    /// Completes the zoom selection:
-    /// • If the rectangle is wide enough → zoom-to-fit the selected beat range.
-    /// • If it was just a click (no drag) → zoom out.
-    /// </summary>
     private void TimelineScrollView_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
         if (!_isZoomSelecting) return;
-
         _isZoomSelecting = false;
-        if (ZoomRect is { } rect) rect.Visibility = Visibility.Collapsed;
+        if (ZoomRect is { } r) r.Visibility = Visibility.Collapsed;
         TimelineScrollView.ReleaseMouseCapture();
-
-        if (Vm is null) return;
-
-        var release = e.GetPosition(TimelineGrid);
-        var dragPixels = Math.Abs(release.X - _zoomSelectOrigin.X);
-
-        const double minDragThreshold = 8.0; // pixels — below this counts as a click
-
-        if (dragPixels < minDragThreshold)
-        {
-            // Simple Ctrl+RightClick → zoom out (step back)
-            ZoomOutFromPoint(_zoomSelectOrigin);
-        }
+        if (Vm is null) { e.Handled = true; return; }
+        var rel = e.GetPosition(TimelineGrid);
+        if (Math.Abs(rel.X - _zoomSelectOrigin.X) < 8)
+            ZoomOut(_zoomSelectOrigin);
         else
-        {
-            // Drag completed → zoom to fit the selected range (horizontal + vertical)
-            var left = Math.Min(_zoomSelectOrigin.X, release.X);
-            var right = Math.Max(_zoomSelectOrigin.X, release.X);
-            var top = Math.Min(_zoomSelectOrigin.Y, release.Y);
-            var bottom = Math.Max(_zoomSelectOrigin.Y, release.Y);
-            ZoomToSelection(left, right, top, bottom);
-        }
-
+            ZoomToRect(Math.Min(_zoomSelectOrigin.X, rel.X), Math.Max(_zoomSelectOrigin.X, rel.X),
+                       Math.Min(_zoomSelectOrigin.Y, rel.Y), Math.Max(_zoomSelectOrigin.Y, rel.Y));
         e.Handled = true;
     }
 
-    /// <summary>
-    /// Zooms the timeline so the selected rectangle fills the viewport
-    /// both horizontally (beat range) and vertically (track range).
-    /// </summary>
-    private void ZoomToSelection(double leftPx, double rightPx, double topPx, double bottomPx)
+    private void ZoomToRect(double l, double r, double t, double b)
     {
         if (Vm is null) return;
-
-        // ── Horizontal: zoom to beat range ──────────────────────────────────
-        var leftBeat = Vm.PixelToBeat(leftPx);
-        var rightBeat = Vm.PixelToBeat(rightPx);
-        var beatSpan = rightBeat - leftBeat;
-        if (beatSpan <= 0) return;
-
-        var viewportWidth = TimelineScrollView.ViewportWidth;
-        var requiredPixelsPerBeat = viewportWidth / beatSpan;
-        var basePixelsPerBeat = Vm.PixelsPerBeat / Vm.ZoomLevel;
-        var newZoom = Math.Clamp(requiredPixelsPerBeat / basePixelsPerBeat, 0.1, 8.0);
-
-        Vm.ZoomLevel = newZoom;
-
-        var newLeftPx = Vm.BeatToPixel(leftBeat);
-        TimelineScrollView.ScrollToHorizontalOffset(Math.Round(newLeftPx));
-
-        // ── Vertical: scale track height so the selected tracks fill the viewport ──
-        var selectionHeight = bottomPx - topPx;
-        if (selectionHeight > 0)
-        {
-            var tracksInSelection = selectionHeight / _zoomSelectTrackHeightBefore;
-            if (tracksInSelection >= 0.5)
-            {
-                var viewportHeight = TimelineScrollView.ViewportHeight;
-                Vm.CurrentTrackHeight = viewportHeight / tracksInSelection;
-            }
-        }
-
-        // Scroll vertically: convert the original top position to the new coordinate system
-        var topTrackIndex = topPx / _zoomSelectTrackHeightBefore;
-        TimelineScrollView.ScrollToVerticalOffset(Math.Round(topTrackIndex * Vm.CurrentTrackHeight));
+        var span = Vm.PixelToBeat(r) - Vm.PixelToBeat(l);
+        if (span <= 0) return;
+        Vm.ZoomLevel = Math.Clamp((TimelineScrollView.ViewportWidth / span) / (Vm.PixelsPerBeat / Vm.ZoomLevel), 0.1, 8.0);
+        TimelineScrollView.ScrollToHorizontalOffset(Math.Round(Vm.BeatToPixel(Vm.PixelToBeat(l))));
+        var h = b - t;
+        if (h > 0 && h / _zoomSelectTrackHeightBefore >= 0.5) Vm.CurrentTrackHeight = TimelineScrollView.ViewportHeight / (h / _zoomSelectTrackHeightBefore);
+        TimelineScrollView.ScrollToVerticalOffset(Math.Round(t / _zoomSelectTrackHeightBefore * Vm.CurrentTrackHeight));
     }
 
-    /// <summary>
-    /// Zooms out one step, keeping the given point roughly centred
-    /// both horizontally and vertically.
-    /// </summary>
-    private void ZoomOutFromPoint(Point canvasPoint)
+    private void ZoomOut(Point p)
     {
         if (Vm is null) return;
-
-        var beatAtPoint = Vm.PixelToBeat(canvasPoint.X);
-        var trackAtPoint = canvasPoint.Y / Vm.CurrentTrackHeight;
-
-        // Zoom out horizontally
-        Vm.ZoomLevel = Math.Max(0.1, Vm.ZoomLevel / 1.5);
-
-        // Shrink track height so all tracks fit in the viewport
-        var viewportHeight = TimelineScrollView.ViewportHeight;
-        var trackCount = Math.Max(1, Vm.Tracks.Count);
-        var fitHeight = viewportHeight / trackCount;
-        // Use the smaller of: current shrunk by same factor, or fit-all
-        Vm.CurrentTrackHeight = Math.Min(Vm.CurrentTrackHeight / 1.5, fitHeight);
-
-        // Keep the beat under the click point at the same viewport-relative position
-        var viewportX = canvasPoint.X - TimelineScrollView.HorizontalOffset;
-        var newPixel = Vm.BeatToPixel(beatAtPoint);
-        TimelineScrollView.ScrollToHorizontalOffset(Math.Round(newPixel - viewportX));
-
-        // Keep the track under the click point at the same viewport-relative position
-        var viewportY = canvasPoint.Y - TimelineScrollView.VerticalOffset;
-        var newY = trackAtPoint * Vm.CurrentTrackHeight;
-        TimelineScrollView.ScrollToVerticalOffset(Math.Round(newY - viewportY));
+        var beat = Vm.PixelToBeat(p.X); var track = p.Y / Vm.CurrentTrackHeight;
+        Vm.ZoomLevel          = Math.Max(0.1, Vm.ZoomLevel / 1.5);
+        Vm.CurrentTrackHeight = Math.Min(Vm.CurrentTrackHeight / 1.5, TimelineScrollView.ViewportHeight / Math.Max(1, Vm.Tracks.Count));
+        TimelineScrollView.ScrollToHorizontalOffset(Math.Round(Vm.BeatToPixel(beat) - (p.X - TimelineScrollView.HorizontalOffset)));
+        TimelineScrollView.ScrollToVerticalOffset(Math.Round(track * Vm.CurrentTrackHeight - (p.Y - TimelineScrollView.VerticalOffset)));
     }
 
-    /// <summary>
-    /// Handles clicking on the timeline to seek playhead
-    /// </summary>
-    private void TimelineGrid_MouseDown(object sender, MouseButtonEventArgs e)
-    {
-        if (e.ChangedButton == MouseButton.Left && Vm != null)
-        {
-            var clickPosition = e.GetPosition(TimelineGrid);
-            UpdatePlayheadPosition(clickPosition);
-            e.Handled = true;
-        }
-    }
-
-    /// <summary>
-    /// Right-click on solo: if multiple tracks are soloed, unsolo all.
-    /// </summary>
     private void Solo_RightClick(object sender, MouseButtonEventArgs e)
     {
         if (Vm == null) return;
-
-        var soloedTracks = Vm.Tracks.Where(t => t.Model.IsSolo).ToList();
-        if (soloedTracks.Count > 1)
-        {
-            foreach (var track in soloedTracks)
-                track.Model.IsSolo = false;
-            e.Handled = true;
-        }
+        var s = Vm.Tracks.Where(t => t.Model.IsSolo).ToList();
+        if (s.Count > 1) { foreach (var t in s) t.Model.IsSolo = false; e.Handled = true; }
     }
 }
-
