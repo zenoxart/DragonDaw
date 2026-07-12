@@ -1,0 +1,282 @@
+<UserControl x:Class="DAW.MVVM.Views.Mixer.MixerEffectRackView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:DAW.MVVM.Views.Mixer"
+             mc:Ignorable="d" 
+             d:DesignHeight="500" d:DesignWidth="240"
+             Background="{DynamicResource PanelBg}">
+    
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        
+        <!-- Expand/Collapse Converter -->
+        <local:ExpandIconConverter x:Key="ExpandIconConverter"/>
+        
+        <!-- Slot Style -->
+        <Style x:Key="SlotButton" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource DropdownBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" 
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="3"
+                                Padding="6,4">
+                            <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ControlBg}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource LapisAccentBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <!-- Active Slot Style -->
+        <Style x:Key="ActiveSlotButton" TargetType="Button" BasedOn="{StaticResource SlotButton}">
+            <Setter Property="Background" Value="{DynamicResource HighlightBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource LapisBlueBrush}"/>
+        </Style>
+        
+        <!-- Mix Knob Style -->
+        <Style x:Key="MixKnob" TargetType="Slider">
+            <Setter Property="Orientation" Value="Horizontal"/>
+            <Setter Property="Minimum" Value="0"/>
+            <Setter Property="Maximum" Value="1"/>
+            <Setter Property="Width" Value="50"/>
+            <Setter Property="Height" Value="14"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Slider">
+                        <Grid>
+                            <Border Background="{DynamicResource DarkBg}" CornerRadius="2" Height="4" VerticalAlignment="Center"/>
+                            <Track x:Name="PART_Track">
+                                <Track.Thumb>
+                                    <Thumb Width="10" Height="10">
+                                        <Thumb.Template>
+                                            <ControlTemplate>
+                                                <Ellipse Fill="{DynamicResource LapisAccentBrush}" Stroke="{DynamicResource LapisLightBrush}" StrokeThickness="1"/>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <!-- Toggle Button Style -->
+        <Style x:Key="BypassToggle" TargetType="ToggleButton">
+            <Setter Property="Width" Value="20"/>
+            <Setter Property="Height" Value="20"/>
+            <Setter Property="Background" Value="{DynamicResource ControlBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextDim}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" 
+                                CornerRadius="3" BorderThickness="{TemplateBinding BorderThickness}"
+                                BorderBrush="{TemplateBinding BorderBrush}">
+                            <TextBlock Text="●" HorizontalAlignment="Center" VerticalAlignment="Center" 
+                                       FontSize="10" Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#4CAF50"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#4CAF50"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource LapisAccentBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+    
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        
+        <!-- Header -->
+        <Border Grid.Row="0" Background="{DynamicResource ControlBg}" Padding="12,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="🎛️" FontSize="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                <TextBlock x:Name="TitleText" 
+                           Grid.Column="1"
+                           Text="Mixer – Master" 
+                           Foreground="{DynamicResource TextPrimary}" 
+                           FontSize="13" 
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+        
+        <!-- Status Bar -->
+        <Border x:Name="StatusBar" Grid.Row="1" Background="{DynamicResource DropdownBg}" Padding="10,4" Visibility="Collapsed">
+            <TextBlock x:Name="StatusText" Foreground="{DynamicResource TextSecondary}" FontSize="10"/>
+        </Border>
+        
+        <!-- Effect Slots -->
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="8">
+            <ItemsControl x:Name="SlotsContainer">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type local:EffectSlotViewData}">
+                        <Border Margin="0,2" Background="{DynamicResource DropdownBg}" CornerRadius="4" 
+                                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                            <StackPanel>
+                                <!-- Slot Header Row -->
+                                <Grid Margin="6,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>  <!-- Slot Number -->
+                                        <ColumnDefinition Width="Auto"/>  <!-- Expand -->
+                                        <ColumnDefinition Width="*"/>     <!-- Plugin Name -->
+                                        <ColumnDefinition Width="Auto"/>  <!-- Active Toggle -->
+                                    </Grid.ColumnDefinitions>
+                                    
+                                    <!-- Slot Number -->
+                                    <TextBlock Grid.Column="0" 
+                                               Text="{Binding SlotIndex}" 
+                                               Foreground="{DynamicResource TextDim}" 
+                                               FontSize="9" 
+                                               FontWeight="Bold"
+                                               Width="14"
+                                               VerticalAlignment="Center"/>
+                                    
+                                    <!-- Expand Button -->
+                                    <Button Grid.Column="1" 
+                                            Content="{Binding IsExpanded, Converter={StaticResource ExpandIconConverter}}"
+                                            Click="OnExpandClicked"
+                                            Tag="{Binding SlotIndex}"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Foreground="{DynamicResource TextSecondary}"
+                                            FontSize="10"
+                                            Padding="4,2"
+                                            Cursor="Hand"
+                                            Visibility="{Binding HasPlugin, Converter={StaticResource BoolToVis}}"/>
+                                    
+                                    <!-- Plugin Name / Add Button -->
+                                    <Button Grid.Column="2" 
+                                            Click="OnSlotClicked"
+                                            Tag="{Binding SlotIndex}"
+                                            HorizontalContentAlignment="Left"
+                                            Margin="4,0">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource SlotButton}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding HasPlugin}" Value="True">
+                                                        <Setter Property="Background" Value="{DynamicResource HighlightBg}"/>
+                                                        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+                                                        <Setter Property="BorderBrush" Value="{DynamicResource LapisBlueBrush}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding PluginIcon}" FontSize="12" Margin="0,0,6,0"/>
+                                            <TextBlock Text="{Binding DisplayText}" FontSize="10" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
+                                    
+                                    <!-- Active/Bypass Toggle -->
+                                    <ToggleButton Grid.Column="3" 
+                                                  IsChecked="{Binding IsActive}"
+                                                  Click="OnBypassClicked"
+                                                  Tag="{Binding SlotIndex}"
+                                                  Style="{StaticResource BypassToggle}"
+                                                  ToolTip="Aktiv/Bypass"
+                                                  Visibility="{Binding HasPlugin, Converter={StaticResource BoolToVis}}"/>
+                                </Grid>
+                                
+                                <!-- Expanded Content (Mix Knob + Remove) -->
+                                <Border Background="{DynamicResource DarkBg}" 
+                                        Margin="6,0,6,6" 
+                                        Padding="8,6" 
+                                        CornerRadius="3"
+                                        Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        
+                                        <!-- Mix Label -->
+                                        <TextBlock Grid.Column="0" Text="Mix" 
+                                                   Foreground="{DynamicResource TextDim}" FontSize="9" 
+                                                   VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        
+                                        <!-- Mix Slider -->
+                                        <Slider Grid.Column="1" 
+                                                Value="{Binding SlotMix}"
+                                                Style="{StaticResource MixKnob}"
+                                                ValueChanged="OnMixChanged"
+                                                Tag="{Binding SlotIndex}"/>
+                                        
+                                        <!-- Mix Value Display -->
+                                        <TextBlock Grid.Column="2" 
+                                                   Text="{Binding MixDisplay}" 
+                                                   Foreground="{DynamicResource LapisAccentBrush}" 
+                                                   FontSize="9"
+                                                   Width="35"
+                                                   VerticalAlignment="Center"
+                                                   Margin="8,0"/>
+                                        
+                                        <!-- Remove Button -->
+                                        <Button Grid.Column="3" 
+                                                Content="✕" 
+                                                Click="OnRemoveClicked"
+                                                Tag="{Binding SlotIndex}"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Foreground="#F85149"
+                                                FontSize="12"
+                                                Padding="4,2"
+                                                Cursor="Hand"
+                                                ToolTip="Effekt entfernen"/>
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+        
+        <!-- Loading Overlay -->
+        <Border x:Name="LoadingOverlay" Grid.RowSpan="3" 
+                Background="#80000000" Visibility="Collapsed">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock Text="⏳" FontSize="24" HorizontalAlignment="Center"/>
+                <TextBlock Text="Laden..." Foreground="{DynamicResource TextSecondary}" FontSize="11" Margin="0,8,0,0"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

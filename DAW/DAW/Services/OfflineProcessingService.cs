@@ -1,5 +1,5 @@
 using System.Collections.Concurrent;
-using DAW.Models;
+using DAW.MVVM.Models;
 using NAudio.Wave;
 
 namespace DAW.Services;

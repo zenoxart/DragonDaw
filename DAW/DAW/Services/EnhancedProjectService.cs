@@ -2,9 +2,10 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using DAW.Models;
-using DAW.ViewModels;
 using DAW.Audio.Effects;
+using DAW.MVVM.Models;
+using DAW.MVVM.Models.Mixer;
+using DAW.MVVM.ViewModels;
 
 namespace DAW.Services;
 
@@ -701,7 +702,7 @@ public sealed class EnhancedProjectService
                     .FirstOrDefault(c => c.SourceTrack?.TrackNumber.ToString() == l.SourceTrackId
                                       || (l.SourceTrackId == null && c.SourceTrack == null && c.ChannelNumber == l.ChannelNumber)))
                 .Where(c => c != null)
-                .Cast<DAW.Models.Mixer.MixerChannel>()
+                .Cast<MixerChannel>()
                 .ToList();
 
             for (int i = 0; i < ordered.Count; i++)
@@ -722,7 +723,7 @@ public sealed class EnhancedProjectService
 
             foreach (var pp in project.Patterns)
             {
-                var model = new DAW.Models.Sequencer.PatternModel
+                var model = new DAW.MVVM.Models.Sequencer.PatternModel
                 {
                     Name      = pp.Name,
                     StepCount = pp.StepCount,
@@ -736,7 +737,7 @@ public sealed class EnhancedProjectService
                     try { channelColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(pc.ChannelColor); }
                     catch { channelColor = System.Windows.Media.Colors.DodgerBlue; }
 
-                    var ch = new DAW.Models.Sequencer.ChannelModel(pc.Name, pp.StepCount)
+                    var ch = new DAW.MVVM.Models.Sequencer.ChannelModel(pc.Name, pp.StepCount)
                     {
                         SamplePath   = pc.SamplePath,
                         PluginIcon   = pc.PluginIcon,
@@ -758,7 +759,7 @@ public sealed class EnhancedProjectService
                     // Restore Piano Roll notes
                     foreach (var pn in pc.PianoRollNotes)
                     {
-                        ch.PianoRollNotes.Add(new DAW.Models.PianoRoll.PianoRollNote
+                        ch.PianoRollNotes.Add(new DAW.MVVM.Models.PianoRoll.PianoRollNote
                         {
                             Pitch     = pn.Pitch,
                             StartTick = pn.StartTick,

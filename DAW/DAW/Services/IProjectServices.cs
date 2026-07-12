@@ -1,4 +1,4 @@
-using DAW.Models;
+using DAW.MVVM.Models;
 
 namespace DAW.Services;
 

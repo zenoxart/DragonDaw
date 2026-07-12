@@ -52,6 +52,20 @@ public sealed class AudioMixEngine : IDisposable
 
         _waveOut = CreateWaveOut(desiredLatency, numberOfBuffers);
         _waveOut.Init(_masterMeter);
+
+        // ── ALWAYS-ON DEVICE (professional-DAW behaviour) ────────────────────
+        // Start the output stream immediately and keep it running for the
+        // lifetime of the engine. The mixer has ReadFully=true, so it streams
+        // silence whenever no voice/track is active.
+        //
+        // Why: a cold WaveOutEvent.Play() burst-fills ALL its buffers
+        // (latency × bufferCount) in one go while the audio endpoint is still
+        // waking from idle. Any sample armed at that moment gets its attack
+        // swallowed — this was the root cause of the truncated first pattern
+        // hit in the Playlist. With the stream permanently hot there is no
+        // cold start, no burst fill, and trigger latency becomes a uniform
+        // single buffer period for every hit.
+        _waveOut.Play();
     }
 
     private static WaveOutEvent CreateWaveOut(int latencyMs, int buffers)
@@ -67,14 +81,14 @@ public sealed class AudioMixEngine : IDisposable
             CurrentDesiredLatency  = latencyMs;
             CurrentNumberOfBuffers = buffers;
 
-            bool wasPlaying = _waveOut.PlaybackState == PlaybackState.Playing;
             _waveOut.Stop();
             _waveOut.Dispose();
 
             _waveOut = CreateWaveOut(latencyMs, buffers);
             _waveOut.Init(_masterMeter);
 
-            if (wasPlaying) _waveOut.Play();
+            // Device is always-on (see constructor) — restart unconditionally.
+            _waveOut.Play();
         }
     }
 
@@ -114,6 +128,17 @@ public sealed class AudioMixEngine : IDisposable
         int idx  = Interlocked.Increment(ref _nextVoice) % VoicePoolSize;
         _voicePool[idx].Trigger(sample, velocity);
         Play();
+    }
+
+    /// <summary>
+    /// Immediately silences every voice in the step pool.
+    /// Call on transport stop — with the always-on device, ringing samples
+    /// would otherwise play out their tail after the user pressed Stop.
+    /// </summary>
+    public void StopAllVoices()
+    {
+        foreach (var v in _voicePool)
+            v.Kill();
     }
 
     public void AddInput(ISampleProvider input)
@@ -192,9 +217,9 @@ public sealed class AudioMixEngine : IDisposable
     /// Uses <see cref="RateChangeSampleProvider"/> for real-time resampling.
     /// Safe to call from any thread.
     /// </summary>
-    public void PlayPreloadedAtPitch(PreloadedSample sample, int semitones)
+    public void PlayPreloadedAtPitch(PreloadedSample sample, int semitones, float velocity = 1.0f)
     {
-        if (semitones == 0) { PlayPreloaded(sample); return; }
+        if (semitones == 0) { PlayPreloaded(sample, velocity); return; }
 
         float rate = (float)Math.Pow(2.0, semitones / 12.0);
 
@@ -202,7 +227,7 @@ public sealed class AudioMixEngine : IDisposable
         {
             try
             {
-                var raw    = new PreloadedSampleProvider(sample);
+                var raw     = new PreloadedSampleProvider(sample, velocity);
                 var pitched = new RateChangeSampleProvider(raw) { Rate = rate };
                 var adapted = EnsureMatchingFormat(pitched);
 
@@ -219,7 +244,7 @@ public sealed class AudioMixEngine : IDisposable
     }
 
     /// <summary>Wraps a <see cref="PreloadedSample"/> as a one-shot <see cref="ISampleProvider"/>.</summary>
-    private sealed class PreloadedSampleProvider(PreloadedSample sample) : ISampleProvider
+    private sealed class PreloadedSampleProvider(PreloadedSample sample, float velocity = 1.0f) : ISampleProvider
     {
         private int _pos;
         public WaveFormat WaveFormat => sample.Format;
@@ -230,11 +255,12 @@ public sealed class AudioMixEngine : IDisposable
             int toCopy    = Math.Min(count, remaining);
             if (toCopy == 0) return 0;
 
-            if (sample.Volume == 1.0f)
+            float vol = sample.Volume * velocity;
+            if (vol == 1.0f)
                 Array.Copy(sample.Data, _pos, buffer, offset, toCopy);
             else
                 for (int i = 0; i < toCopy; i++)
-                    buffer[offset + i] = sample.Data[_pos + i] * sample.Volume;
+                    buffer[offset + i] = sample.Data[_pos + i] * vol;
 
             _pos += toCopy;
             return toCopy;
@@ -295,22 +321,25 @@ public sealed class AudioMixEngine : IDisposable
         }
     }
 
+    /// <summary>
+    /// Transport pause. The output DEVICE keeps running (always-on design);
+    /// callers pause their own sources (tracks stop reading, voices go idle)
+    /// and the mixer streams silence. Stopping the device here would re-create
+    /// the cold-start buffer burst that truncates the first sample on resume.
+    /// </summary>
     public void Pause()
     {
-        lock (_deviceLock)
-        {
-            if (_waveOut.PlaybackState == PlaybackState.Playing)
-                _waveOut.Pause();
-        }
+        // Intentionally no _waveOut.Pause() — see XML doc.
     }
 
+    /// <summary>
+    /// Transport stop. Same as <see cref="Pause"/>: the device stays hot;
+    /// it is only fully stopped in <see cref="Dispose"/> (app shutdown) or
+    /// <see cref="ReconfigureBufferSize"/> (device re-init).
+    /// </summary>
     public void Stop()
     {
-        lock (_deviceLock)
-        {
-            if (_waveOut.PlaybackState != PlaybackState.Stopped)
-                _waveOut.Stop();
-        }
+        // Intentionally no _waveOut.Stop() — see XML doc.
     }
 
     public PlaybackState PlaybackState
@@ -390,6 +419,9 @@ internal sealed class StepVoice : ISampleProvider
         // Atomically replace: the mixer thread will pick it up on the next callback.
         Volatile.Write(ref _current, new Playback(sample.Data, sample.Volume * velocity));
     }
+
+    /// <summary>Silences this voice immediately. Safe to call from any thread.</summary>
+    public void Kill() => Volatile.Write(ref _current, null);
 
     public int Read(float[] buffer, int offset, int count)
     {

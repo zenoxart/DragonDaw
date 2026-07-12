@@ -1,6 +1,6 @@
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
-using DAW.Models;
+using DAW.MVVM.Models;
 
 namespace DAW.Audio;
 

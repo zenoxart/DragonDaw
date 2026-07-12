@@ -18,13 +18,13 @@ namespace DAW
             _ = Services.AppLogger.Instance;
 
             // Load persisted theme, language and UI scale
-            OptionsWindow.LoadAndApplyPersistedSettings();
+            MVVM.Views.OptionsWindow.LoadAndApplyPersistedSettings();
         }
 
         private async void App_Startup(object sender, StartupEventArgs e)
         {
             // Show splash immediately
-            var splash = new SplashScreenWindow();
+            var splash = new MVVM.Views.SplashScreenWindow();
             splash.Show();
 
             // Step 1 – basic init already done in OnStartup

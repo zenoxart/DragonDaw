@@ -3,9 +3,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
-using DAW.Models;
+using DAW.MVVM.Models;
+using DAW.MVVM.ViewModels;
 using DAW.Plugins;
-using DAW.ViewModels;
 using DAW.Views;
 
 namespace DAW;
@@ -23,7 +23,63 @@ public partial class MainWindow : Window
         _viewModel = new MainViewModel();
         DataContext = _viewModel;
     }
+
+    // ── Transport-bar BPM box ────────────────────────────────────────────
+
+    /// <summary>Select all on focus so typing replaces the old value.</summary>
+    private void TransportBpmBox_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is TextBox tb)
+            tb.Dispatcher.InvokeAsync(tb.SelectAll, System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    /// <summary>
+    /// Enter commits the typed BPM (binding updates on demand), Escape reverts
+    /// to the current value. The binding itself is LostFocus — never per
+    /// keystroke, so the ViewModel's Math.Clamp can no longer mangle partial
+    /// input while typing (the old "96 becomes 206" bug).
+    /// </summary>
+    private void TransportBpmBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (sender is not TextBox tb) return;
+
+        if (e.Key == Key.Enter)
+        {
+            tb.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();  // commit
+            tb.GetBindingExpression(TextBox.TextProperty)?.UpdateTarget();  // show clamped value
+            Keyboard.ClearFocus();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            tb.GetBindingExpression(TextBox.TextProperty)?.UpdateTarget();  // revert text
+            Keyboard.ClearFocus();
+            e.Handled = true;
+        }
+    }
     
+    /// <summary>
+    /// Global Space = Play/Stop toggle.
+    ///
+    /// Handled in PREVIEW (tunneling) so it always works: with the bubbling
+    /// KeyDown, Space never reached the window when focus sat on a Button
+    /// (Space "clicks" the focused button — e.g. right after clicking Play!)
+    /// or inside a ScrollViewer (Space scrolls). Text input stays untouched:
+    /// when a TextBox has focus, Space types a space as usual.
+    /// </summary>
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Space || Keyboard.Modifiers != ModifierKeys.None) return;
+        if (Keyboard.FocusedElement is TextBox) return;   // typing has priority
+
+        if (_viewModel.IsPlaying)
+            _viewModel.StopAllCommand.Execute(null);       // second press → Stop
+        else
+            _viewModel.PlayAllCommand.Execute(null);       // first press → Play
+
+        e.Handled = true;
+    }
+
     /// <summary>
     /// Handles keyboard shortcuts.
     /// </summary>
@@ -78,19 +134,8 @@ public partial class MainWindow : Window
             return;
         }
         
-        // Spacebar: toggle play/stop (only when no TextBox is focused)
-        if (e.Key == Key.Space && Keyboard.Modifiers == ModifierKeys.None)
-        {
-            if (Keyboard.FocusedElement is not System.Windows.Controls.TextBox)
-            {
-                if (_viewModel.IsPlaying)
-                    _viewModel.StopAllCommand.Execute(null);
-                else
-                    _viewModel.PlayAllCommand.Execute(null);
-                e.Handled = true;
-                return;
-            }
-        }
+        // (Space play/stop toggle lives in Window_PreviewKeyDown — tunneling —
+        //  so focused buttons and scroll viewers can never swallow it.)
         
         // Ctrl+P opens plugin palette
         if (e.Key == Key.P && Keyboard.Modifiers == ModifierKeys.Control)
@@ -126,7 +171,7 @@ public partial class MainWindow : Window
     {
         if (sender is ListViewItem { DataContext: Track track })
         {
-            SamplerWindow.ShowForTrack(track, this);
+            MVVM.Views.SamplerWindow.ShowForTrack(track, this);
             e.Handled = true;
         }
     }

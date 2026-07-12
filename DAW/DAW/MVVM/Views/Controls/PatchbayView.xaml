@@ -1,0 +1,91 @@
+<UserControl x:Class="DAW.MVVM.Views.Controls.PatchbayView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d" 
+             d:DesignHeight="450" d:DesignWidth="800"
+             Background="{DynamicResource DarkBg}">
+    
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        
+        <!-- Header -->
+        <Border Grid.Row="0" Background="{DynamicResource ControlBg}" Padding="12,8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="🔌" FontSize="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                    <TextBlock Text="PATCHBAY" 
+                               Foreground="{DynamicResource TextPrimary}" 
+                               FontSize="13" 
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+                
+                <TextBlock Grid.Column="1" 
+                           Text="Ziehen Sie von Output (oben) zu Input (unten) um Verbindungen zu erstellen"
+                           Foreground="{DynamicResource TextDim}"
+                           FontSize="9"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Center"/>
+                
+                <Button Grid.Column="2" 
+                        Content="⟲ Reset All"
+                        Click="ResetAll_Click"
+                        ToolTip="Alle Verbindungen entfernen"
+                        FontSize="9"
+                        Padding="8,4"
+                        Cursor="Hand">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
+                            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+                            <Setter Property="BorderThickness" Value="1"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="Bd" 
+                                                Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                CornerRadius="3"
+                                                Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="#C41E3A"/>
+                                                <Setter Property="Foreground" Value="White"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </Grid>
+        </Border>
+        
+        <!-- Patchbay Grid -->
+        <ScrollViewer Grid.Row="1" 
+                      HorizontalScrollBarVisibility="Auto" 
+                      VerticalScrollBarVisibility="Auto"
+                      Background="{DynamicResource PanelBg}">
+            <Grid x:Name="PatchbayContainer" Margin="20">
+                <StackPanel x:Name="PatchbayContent" Orientation="Vertical"/>
+            </Grid>
+        </ScrollViewer>
+    </Grid>
+</UserControl>
+

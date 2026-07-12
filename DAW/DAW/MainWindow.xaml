@@ -5,14 +5,14 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:local="clr-namespace:DAW"
-    xmlns:vm="clr-namespace:DAW.ViewModels"
-    xmlns:views="clr-namespace:DAW.Views"
-    xmlns:arrangement="clr-namespace:DAW.Views.Arrangement"
-    xmlns:browser="clr-namespace:DAW.Views.AudioBrowser"
-    xmlns:controls="clr-namespace:DAW.Views.Controls"
+    xmlns:vm="clr-namespace:DAW.MVVM.ViewModels"
+    xmlns:views="clr-namespace:DAW.MVVM.Views"
+    xmlns:arrangement="clr-namespace:DAW.MVVM.Views.Arrangement"
+    xmlns:browser="clr-namespace:DAW.MVVM.Views.AudioBrowser"
+    xmlns:controls="clr-namespace:DAW.MVVM.Views.Controls"
     xmlns:converters="clr-namespace:DAW.Converters"
-    xmlns:seq="clr-namespace:DAW.Views.Sequencer"
-    xmlns:pianoroll="clr-namespace:DAW.Views.PianoRoll"
+    xmlns:seq="clr-namespace:DAW.MVVM.Views.Sequencer"
+    xmlns:pianoroll="clr-namespace:DAW.MVVM.Views.PianoRoll"
     mc:Ignorable="d"
     Title="Dragon DAW" Height="800" Width="1280"
     WindowStartupLocation="CenterScreen"
@@ -23,6 +23,7 @@
     Drop="Window_Drop"
     DragOver="Window_DragOver"
     KeyDown="Window_KeyDown"
+    PreviewKeyDown="Window_PreviewKeyDown"
     StateChanged="Window_StateChanged">
 
     <Window.Resources>
@@ -391,10 +392,17 @@
                             ToolTip="Record" IsEnabled="False"/>
                     <Border Background="{DynamicResource DarkBg}" CornerRadius="3" Padding="6,2" Margin="4,0,0,0" VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal">
-                            <TextBox Text="{Binding BPM, UpdateSourceTrigger=PropertyChanged}" 
+                            <!-- BPM: commits on Enter or focus loss — NOT per keystroke.
+                                 With UpdateSourceTrigger=PropertyChanged the setter's
+                                 Math.Clamp(20,300) fired while typing: entering "9" was
+                                 clamped to "20", then the next digit appended → "206". -->
+                            <TextBox x:Name="TransportBpmBox"
+                                     Text="{Binding BPM, UpdateSourceTrigger=LostFocus}"
                                      Background="Transparent" Foreground="{DynamicResource AccentLightBrush}" BorderThickness="0"
-                                     FontWeight="Bold" FontSize="12" Width="30" TextAlignment="Center"
-                                     VerticalAlignment="Center" ToolTip="BPM bearbeiten"/>
+                                     FontWeight="Bold" FontSize="12" Width="34" TextAlignment="Center"
+                                     VerticalAlignment="Center" ToolTip="BPM eingeben — Enter bestätigt, Esc bricht ab"
+                                     PreviewKeyDown="TransportBpmBox_PreviewKeyDown"
+                                     GotKeyboardFocus="TransportBpmBox_GotKeyboardFocus"/>
                             <TextBlock Text="bpm" Foreground="{DynamicResource TextDim}" FontSize="8" VerticalAlignment="Center" Margin="1,1,0,0"/>
                         </StackPanel>
                     </Border>
