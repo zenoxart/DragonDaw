@@ -37,6 +37,9 @@ public class ReverbEffect : AudioEffect
     private double _earlySend = 0.6;
     private double _earlyModRate = 0.8;
     private double _earlyModDepth = 0.3;
+    private double _earlyHighCut = 8000.0;
+    private double _earlyHighShelf = -3.0;
+    private double _earlyLowShelf = 0.0;
 
     // ── Late Reverberation parameters ──────────────────────────────────────
     private double _lateSize = 0.5;
@@ -105,6 +108,11 @@ public class ReverbEffect : AudioEffect
     private readonly float[] _fdnHsStateR = new float[FdnSize];
     private readonly float[] _fdnLsStateL = new float[FdnSize];
     private readonly float[] _fdnLsStateR = new float[FdnSize];
+
+    // Early-reflection tone shaping filters (independent from the late FDN)
+    private float _earlyLpStateL, _earlyLpStateR;
+    private float _earlyHsStateL, _earlyHsStateR;
+    private float _earlyLsStateL, _earlyLsStateR;
 
     // Mode presets: [earlyDiffusion, density factor, modulation scale]
     private static readonly double[][] ModePresets =
@@ -198,6 +206,27 @@ public class ReverbEffect : AudioEffect
     {
         get => _earlyModDepth;
         set => SetField(ref _earlyModDepth, Math.Clamp(value, 0, 1));
+    }
+
+    /// <summary>Early-reflection high frequency cutoff in Hz (1000–20000) — independent of the late reverb's HighCut</summary>
+    public double EarlyHighCut
+    {
+        get => _earlyHighCut;
+        set => SetField(ref _earlyHighCut, Math.Clamp(value, 1000, 20000));
+    }
+
+    /// <summary>Early-reflection high shelf gain in dB (-12 to 0)</summary>
+    public double EarlyHighShelf
+    {
+        get => _earlyHighShelf;
+        set => SetField(ref _earlyHighShelf, Math.Clamp(value, -12, 0));
+    }
+
+    /// <summary>Early-reflection low shelf gain in dB (-6 to +6)</summary>
+    public double EarlyLowShelf
+    {
+        get => _earlyLowShelf;
+        set => SetField(ref _earlyLowShelf, Math.Clamp(value, -6, 6));
     }
 
     // ── Late Reverberation properties ──────────────────────────────────────
@@ -412,6 +441,9 @@ public class ReverbEffect : AudioEffect
         float lowShelfGain = (float)Math.Pow(10, _lowShelf / 20.0);
         float highShelfCoeff = (float)(1.0 - Math.Exp(-2.0 * Math.PI * 4000.0 / sampleRate));
         float lowShelfCoeff = (float)(1.0 - Math.Exp(-2.0 * Math.PI * 300.0 / sampleRate));
+        float earlyLpCoeff = (float)(1.0 - Math.Exp(-2.0 * Math.PI * _earlyHighCut / sampleRate));
+        float earlyHighShelfGain = (float)Math.Pow(10, _earlyHighShelf / 20.0);
+        float earlyLowShelfGain = (float)Math.Pow(10, _earlyLowShelf / 20.0);
 
         // LFO
         double earlyLfoInc = 2.0 * Math.PI * _earlyModRate / sampleRate;
@@ -485,6 +517,20 @@ public class ReverbEffect : AudioEffect
 
                 _earlyDiffIdx[d] = (dIdx + 1) % bufDL.Length;
             }
+
+            // ── Early tone shaping (independent EQ from the late reverb) ──
+            _earlyLpStateL += earlyLpCoeff * (erL - _earlyLpStateL); erL = _earlyLpStateL;
+            _earlyLpStateR += earlyLpCoeff * (erR - _earlyLpStateR); erR = _earlyLpStateR;
+
+            _earlyHsStateL += highShelfCoeff * (erL - _earlyHsStateL);
+            _earlyHsStateR += highShelfCoeff * (erR - _earlyHsStateR);
+            erL += (_earlyHsStateL - erL) * (1f - earlyHighShelfGain);
+            erR += (_earlyHsStateR - erR) * (1f - earlyHighShelfGain);
+
+            _earlyLsStateL += lowShelfCoeff * (erL - _earlyLsStateL);
+            _earlyLsStateR += lowShelfCoeff * (erR - _earlyLsStateR);
+            erL += (_earlyLsStateL - erL) * (1f - earlyLowShelfGain);
+            erR += (_earlyLsStateR - erR) * (1f - earlyLowShelfGain);
 
             // ── Late FDN ──
             float fdnInL = pdL * (1f - earlySendAmt) + erL * earlySendAmt;
@@ -649,6 +695,10 @@ public class ReverbEffect : AudioEffect
         Array.Clear(_fdnHpStateL); Array.Clear(_fdnHpStateR);
         Array.Clear(_fdnHsStateL); Array.Clear(_fdnHsStateR);
         Array.Clear(_fdnLsStateL); Array.Clear(_fdnLsStateR);
+
+        _earlyLpStateL = _earlyLpStateR = 0;
+        _earlyHsStateL = _earlyHsStateR = 0;
+        _earlyLsStateL = _earlyLsStateR = 0;
 
         _initialized = false;
     }

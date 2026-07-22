@@ -8,13 +8,19 @@ using static DAW.MVVM.Views.Controls.DragonUI;
 namespace DAW.MVVM.Views.Controls;
 
 /// <summary>
-/// 1176-style FET Compressor — Red Dragon Design.
+/// 1176-style FET Compressor — Dragon Particle-matched design.
 ///
-/// Fixed layout (500 × 480 window):
-///   Row 0  [HDR_H]  Header + GR readout
-///   Row 1  [120]    VU Meter (arc needle)
-///   Row 2  [ROW_H]  4 knobs: INPUT  ATTACK  RELEASE  OUTPUT
-///   Row 3  [BTN_H+24] Ratio section: 4 buttons + label
+/// Layout mirrors the DragonParticle "Intelligent Mastering" plugin:
+///
+///   ┌─ Header ───────────────────────────────────────────────────────────┐
+///   │  1176   FET Compressor                         GR  -x.x dB         │
+///   ├────────────────────────────────────────────────────────────────────┤
+///   │  GAIN (gold)         GAIN REDUCTION (red ring)   TIME (blue)       │
+///   │  ● INPUT             ◉  segmented activity ring   ● ATTACK         │
+///   │  ● OUTPUT            -x.x dB  ·  mode label        ● RELEASE       │
+///   ├─ Ratio section (buttons) ─────────────────────────────────────────┤
+///   ├─ Meter strip:  IN / GR / OUT bars with target markers ────────────┤
+///   └────────────────────────────────────────────────────────────────────┘
 /// </summary>
 public sealed class CompressorControl : FrameworkElement
 {
@@ -43,6 +49,11 @@ public sealed class CompressorControl : FrameworkElement
         new("RELEASE", 10, 1200,   e => e.Release,    (e, v) => e.Release    = v, Log: true, Def: 100),
         new("OUTPUT",  -24, 12,    e => e.OutputGain, (e, v) => e.OutputGain = v, Def: 0),
     ];
+
+    // ── Dragon Particle accent palette (mirrors MasterControl) ─────────────
+    private static readonly Color CGainCol = Color.FromRgb(0xD4, 0xA0, 0x17); // gold — gain
+    private static readonly Color CTimeCol = Color.FromRgb(0x3B, 0x82, 0xF6); // blue — attack/release
+    private static readonly Color CGrCol   = Color.FromRgb(0xC4, 0x1E, 0x3A); // dragon red — gain reduction
 
     private int    _dragIdx = -1;
     private double _dragY, _dragBase;
@@ -79,91 +90,135 @@ public sealed class CompressorControl : FrameworkElement
         if (comp == null) return;
         if (IsCompact) { DrawCompact(dc, comp, W, H); return; }
 
-        // ── Row 1: VU Meter — fixed height 120 ──
-        double mY = HDR_H + PAD;
-        double mH = 120;
-        DrawVU(dc, comp, W / 2, mY + mH * 0.78, Math.Min(W * 0.32, mH * 0.80), mY, mH);
+        // ── Geometry ──
+        double meterStripH = 78;
+        double ratioH       = BTN_H + 30;
+        double topY  = HDR_H + PAD;
+        double panelH = Math.Max(H - topY - PAD - meterStripH - GAP - ratioH - GAP - PAD, 150);
 
-        // ── Row 2: 4 Knobs ──
-        double kY = mY + mH + PAD;
-        var cxs = Columns(PAD, W - PAD * 2, 4);
-        double kcy = KnobCY(kY, KR);
-        for (int i = 0; i < 4; i++)
-        {
-            _kc[i] = new Point(cxs[i], kcy);
-            var k = Knobs[i]; double v = k.Get(comp);
-            double n = k.Log ? LogN(v, k.Min, k.Max) : LinN(v, k.Min, k.Max);
-            DrawKnob(dc, cxs[i], kcy, KR, n, CGold, k.Label, FmtK(k, v));
-        }
+        double cW = W - PAD * 2;
+        double leftW   = cW * 0.24;
+        double rightW  = cW * 0.24;
+        double centreW = cW - leftW - rightW - GAP * 2;
 
-        // ── Row 3: Ratio section ──
-        double ratY = kY + ROW_H + GAP;
-        DrawRatioSection(dc, comp, W, ratY);
+        double leftX   = PAD;
+        double centreX = leftX + leftW + GAP;
+        double rightX  = centreX + centreW + GAP;
+
+        // ── LEFT: GAIN panel (Input / Output) ──
+        RenderKnobPanel(dc, new Rect(leftX, topY, leftW, panelH), "GAIN", CGainCol,
+            comp, Knobs[0], 0, Knobs[3], 3);
+
+        // ── CENTRE: Gain-reduction segmented ring ──
+        double ringR = Math.Min(centreW, panelH) * 0.30;
+        DrawGrDial(dc, centreX + centreW / 2, topY + panelH / 2, ringR, gr);
+
+        // ── RIGHT: TIME panel (Attack / Release) ──
+        RenderKnobPanel(dc, new Rect(rightX, topY, rightW, panelH), "TIME", CTimeCol,
+            comp, Knobs[1], 1, Knobs[2], 2);
+
+        // ── Ratio section ──
+        double ratY = topY + panelH + GAP;
+        DrawRatioSection(dc, comp, W, ratY, ratioH);
+
+        // ── Meter strip: IN / GR / OUT ──
+        double mtrY = ratY + ratioH + GAP;
+        RenderMeterStrip(dc, comp, new Rect(PAD, mtrY, W - PAD * 2, meterStripH));
     }
 
-    // VU meter with arc needle
-    private static void DrawVU(DrawingContext dc, CompressorEffect comp,
-        double cx, double cy, double r, double faceTop, double faceH)
+    // ── Left/right knob panel (gradient bg, section label, 2 stacked knobs) ─
+    private void RenderKnobPanel(DrawingContext dc, Rect r, string label, Color accent,
+        CompressorEffect comp, KD topK, int topIdx, KD botK, int botIdx)
     {
-        // Face panel
-        double fW = r * 2.6;
-        var face = new Rect(cx - fW / 2, faceTop + 4, fW, faceH - 4);
-        var fg = new LinearGradientBrush(
-            Color.FromRgb(0x1C, 0x20, 0x28), Color.FromRgb(0x12, 0x15, 0x1C), 90);
-        fg.Freeze();
-        dc.DrawRoundedRectangle(fg, P(CRed, 1.5), face, 6, 6);
+        var bg = new LinearGradientBrush(Color.FromRgb(0x16, 0x1A, 0x22),
+                                          Color.FromRgb(0x11, 0x14, 0x1A), 90);
+        bg.Freeze();
+        dc.DrawRoundedRectangle(bg, P(CBorder, 0.8), r, 4, 4);
 
-        double aS = Math.PI * 1.05, aE = 0.0;
+        var lbl = Txt(label, 7.5, B(Color.FromArgb(110, accent.R, accent.G, accent.B)),
+            FontWeights.Bold, TFCond);
+        dc.DrawText(lbl, new Point(r.X + 8, r.Y + 6));
 
-        // Zone bands
-        void Band(double f, double t, byte a, Color c)
-        {
-            var pen = new Pen(new SolidColorBrush(Color.FromArgb(a, c.R, c.G, c.B)), r * 0.18);
-            pen.Freeze();
-            DrawArc(dc, cx, cy, r * 0.88, Lerp(aS, aE, f), Lerp(aS, aE, t), pen, 10);
-        }
-        Band(0.00, 0.75, 20, CGreen);
-        Band(0.75, 0.90, 20, COrange);
-        Band(0.90, 1.00, 20, CRed);
+        double cx = r.X + r.Width / 2;
+        double quarter = r.Height / 4;
 
-        // Ticks
-        double[] tdb = [0, 1, 2, 3, 5, 7, 10, 14, 20];
-        foreach (var db in tdb)
-        {
-            double n = 1 - db / 20.0, a = Lerp(aS, aE, n);
-            bool mj = db == 0 || db == 5 || db == 10 || db == 20;
-            dc.DrawLine(mj ? P(CTextSec, 1) : P(CTextDim, 0.7),
-                new Point(cx + r * 0.76 * Math.Cos(a), cy - r * 0.76 * Math.Sin(a)),
-                new Point(cx + r * (mj ? 0.92 : 0.87) * Math.Cos(a), cy - r * (mj ? 0.92 : 0.87) * Math.Sin(a)));
-            if (mj)
-            {
-                var lbl = Txt($"{db}", 6.5, BTextDim, tf: TFMono);
-                dc.DrawText(lbl, new Point(
-                    cx + r * 1.03 * Math.Cos(a) - lbl.Width / 2,
-                    cy - r * 1.03 * Math.Sin(a) - lbl.Height / 2));
-            }
-        }
+        double topCY = r.Y + quarter;
+        _kc[topIdx] = new Point(cx, topCY);
+        double vTop = topK.Get(comp);
+        double nTop = topK.Log ? LogN(vTop, topK.Min, topK.Max) : LinN(vTop, topK.Min, topK.Max);
+        DrawKnob(dc, cx, topCY, KR, nTop, accent, topK.Label, FmtK(topK, vTop));
 
-        // GR label
-        var gLabel = Txt("GR  dB", 8, BTextDim, FontWeights.SemiBold, TFCond);
-        dc.DrawText(gLabel, new Point(cx - gLabel.Width / 2, face.Y + 5));
+        dc.DrawLine(P(CBorder, 0.6),
+            new Point(r.X + 8, r.Y + r.Height / 2),
+            new Point(r.Right - 8, r.Y + r.Height / 2));
 
-        // Needle
-        double n2 = 1 - Math.Clamp(comp.GainReduction, 0, 20) / 20.0;
-        double na = Lerp(aS, aE, n2), nl = r * 0.86;
-        dc.DrawLine(P(Color.FromArgb(45, 0, 0, 0), 3),
-            new Point(cx + 1, cy + 1),
-            new Point(cx + (nl + 1) * Math.Cos(na), cy - (nl + 1) * Math.Sin(na)));
-        dc.DrawLine(P(CTextPri, 1.5),
-            new Point(cx, cy),
-            new Point(cx + nl * Math.Cos(na), cy - nl * Math.Sin(na)));
-        dc.DrawEllipse(BTextPri, null, new Point(cx, cy), 3.2, 3.2);
-        dc.DrawEllipse(BPanel,   null, new Point(cx, cy), 1.4, 1.4);
+        double botCY = r.Y + r.Height - quarter;
+        _kc[botIdx] = new Point(cx, botCY);
+        double vBot = botK.Get(comp);
+        double nBot = botK.Log ? LogN(vBot, botK.Min, botK.Max) : LinN(vBot, botK.Min, botK.Max);
+        DrawKnob(dc, cx, botCY, KR, nBot, accent, botK.Label, FmtK(botK, vBot));
     }
 
-    private void DrawRatioSection(DrawingContext dc, CompressorEffect comp, double W, double y)
+    // ── Centre: gain-reduction segmented activity ring (read-only meter) ───
+    private static void DrawGrDial(DrawingContext dc, double cx, double cy, double r, double grDb)
     {
-        double secH = BTN_H + 30;
+        double norm = Math.Clamp(grDb, 0, 20) / 20.0;
+
+        // Ambient glow
+        var glow = new RadialGradientBrush(
+            Color.FromArgb(18, CGrCol.R, CGrCol.G, CGrCol.B),
+            Color.FromArgb(0,  CGrCol.R, CGrCol.G, CGrCol.B));
+        glow.Freeze();
+        dc.DrawEllipse(glow, null, new Point(cx, cy), r + 30, r + 30);
+
+        // Segmented ring — green (light) → orange (moderate) → red (heavy)
+        const int segs = 36;
+        int lit = (int)(norm * segs);
+        for (int i = 0; i < segs; i++)
+        {
+            double a1 = 5 * Math.PI / 4 + i       * (6 * Math.PI / 4) / segs;
+            double a2 = 5 * Math.PI / 4 + (i + 1) * (6 * Math.PI / 4) / segs;
+            double am = (a1 + a2) / 2;
+            double sr = r + 15;
+            Color sc = i < lit
+                ? (i < segs * 0.55 ? CGreen : i < segs * 0.80 ? COrange : CRed)
+                : Color.FromArgb(22, 0x44, 0x4C, 0x66);
+            dc.DrawLine(new Pen(B(sc), 4),
+                new Point(cx + (sr - 3) * Math.Cos(a1), cy - (sr - 3) * Math.Sin(a1)),
+                new Point(cx + (sr + 3) * Math.Cos(am), cy - (sr + 3) * Math.Sin(am)));
+        }
+
+        // Rim + face — same construction as DrawKnob, but static (no pointer)
+        var rim = new RadialGradientBrush(
+            Color.FromRgb(0x3A, 0x3E, 0x4C), Color.FromRgb(0x1A, 0x1D, 0x24))
+        { GradientOrigin = new Point(0.35, 0.30), Center = new Point(0.35, 0.30) };
+        rim.Freeze();
+        dc.DrawEllipse(rim, null, new Point(cx, cy), r + 1.5, r + 1.5);
+
+        var face = new RadialGradientBrush(
+            Color.FromRgb(0x2C, 0x31, 0x3E), Color.FromRgb(0x15, 0x18, 0x20))
+        { GradientOrigin = new Point(0.35, 0.30), Center = new Point(0.35, 0.30) };
+        face.Freeze();
+        dc.DrawEllipse(face, P(CBorder, 1.2), new Point(cx, cy), r, r);
+
+        // Value, centred in the dial
+        var val = Txt($"-{grDb:F1}", 15, BTextPri, FontWeights.Bold, TFMono);
+        dc.DrawText(val, new Point(cx - val.Width / 2, cy - val.Height / 2 - 4));
+        var unit = Txt("dB GR", 8, BTextDim, tf: TFCond);
+        dc.DrawText(unit, new Point(cx - unit.Width / 2, cy + val.Height / 2 - 6));
+
+        // Label above (fixed distance, same rule as DrawKnob)
+        var lbl = Txt("GAIN REDUCTION", 8.5, BTextSec, FontWeights.SemiBold, TFCond);
+        dc.DrawText(lbl, new Point(cx - lbl.Width / 2, cy - r - 5 - LBL_H + (LBL_H - lbl.Height) / 2));
+
+        // Mode label below
+        string mode = grDb < 2 ? "Transparent" : grDb < 6 ? "Light" : grDb < 12 ? "Moderate" : "Heavy";
+        var mt = Txt(mode, 8, B(Color.FromArgb(150, CGrCol.R, CGrCol.G, CGrCol.B)), tf: TFCond);
+        dc.DrawText(mt, new Point(cx - mt.Width / 2, cy + r + 22));
+    }
+
+    private void DrawRatioSection(DrawingContext dc, CompressorEffect comp, double W, double y, double secH)
+    {
         var secR = new Rect(PAD, y, W - PAD * 2, secH);
         DrawSection(dc, secR, "Ratio", CTextDim);
 
@@ -185,6 +240,73 @@ public sealed class CompressorControl : FrameworkElement
             DrawButton(dc, _rb[i], $"{ratio:F0}:1", act, 9);
         }
     }
+
+    // ── Bottom meter strip — IN / GR / OUT bars, matching Dragon Particle's
+    //    RMS / LUFS / PEAK strip (bar + gradient fill + target marker) ─────
+    private static void RenderMeterStrip(DrawingContext dc, CompressorEffect comp, Rect r)
+    {
+        var bg = new LinearGradientBrush(
+            Color.FromRgb(0x0C, 0x10, 0x16), Color.FromRgb(0x0A, 0x0D, 0x12), 90);
+        bg.Freeze();
+        dc.DrawRoundedRectangle(bg, P(CBorder, 0.8), r, 4, 4);
+
+        double barH  = 8;
+        double slotH = (r.Height - 10) / 3.0;
+
+        double inNorm  = Norm01(comp.InputLevel);
+        double outNorm = Norm01(comp.OutputLevel);
+        double grNorm  = Math.Clamp(comp.GainReduction, 0, 20) / 20.0;
+
+        (string label, double norm, string val, double target, Color accent)[] meters =
+        [
+            ("IN",  inNorm,  $"{comp.InputLevel:F1} dB",  0.85, CGainCol),
+            ("GR",  grNorm,  $"-{comp.GainReduction:F1} dB", -1,   CGrCol),
+            ("OUT", outNorm, $"{comp.OutputLevel:F1} dB", 0.85, CGainCol),
+        ];
+
+        double lbW  = 32;
+        double valW = 62;
+        double barX = r.X + lbW + 6;
+        double barW = r.Width - lbW - valW - 12;
+
+        for (int i = 0; i < 3; i++)
+        {
+            var (label, norm, val, target, accent) = meters[i];
+            double mY    = r.Y + 5 + i * slotH;
+            double centY = mY + slotH / 2;
+            double barY  = centY - barH / 2;
+
+            var lt = Txt(label, 7.5, BTextDim, FontWeights.Bold, TFCond);
+            dc.DrawText(lt, new Point(r.X + 6, centY - lt.Height / 2));
+
+            var track = new Rect(barX, barY, barW, barH);
+            dc.DrawRoundedRectangle(BSurface, null, track, 2, 2);
+
+            if (norm > 0.005)
+            {
+                double fw = (barW - 4) * norm;
+                Color fc = norm < 0.75 ? accent : norm < 0.92 ? COrange : CRed;
+                var fb = new LinearGradientBrush(
+                    Color.FromArgb(200, fc.R, fc.G, fc.B),
+                    Color.FromArgb(110, fc.R, fc.G, fc.B), 0);
+                fb.Freeze();
+                dc.DrawRoundedRectangle(fb, null,
+                    new Rect(barX + 2, barY + 2, fw, barH - 4), 1, 1);
+            }
+
+            if (target >= 0)
+            {
+                double tx = barX + target * (barW - 4) + 2;
+                dc.DrawLine(P(Color.FromArgb(80, 0xFF, 0xFF, 0xFF), 1),
+                    new Point(tx, barY - 2), new Point(tx, barY + barH + 2));
+            }
+
+            var vt = Txt(val, 8, B(accent), FontWeights.SemiBold, TFMono);
+            dc.DrawText(vt, new Point(barX + barW + 6, centY - vt.Height / 2));
+        }
+    }
+
+    private static double Norm01(double db) => Math.Clamp((db + 60.0) / 60.0, 0, 1);
 
     private static void DrawCompact(DrawingContext dc, CompressorEffect comp, double W, double H)
     {
@@ -261,6 +383,6 @@ public sealed class CompressorControl : FrameworkElement
     }
 
     protected override Size MeasureOverride(Size av)
-        => new(Math.Max(double.IsInfinity(av.Width)  ? 500 : av.Width,  440),
-               Math.Max(double.IsInfinity(av.Height) ? 480 : av.Height, 420));
+        => new(Math.Max(double.IsInfinity(av.Width)  ? 520 : av.Width,  460),
+               Math.Max(double.IsInfinity(av.Height) ? 480 : av.Height, 460));
 }

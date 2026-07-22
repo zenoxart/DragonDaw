@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using DAW.MVVM.ViewModels.Sequencer;
+using DAW.MVVM.Views;
 
 namespace DAW.MVVM.Views.Sequencer;
 
@@ -538,6 +539,10 @@ public sealed class ChannelRackCanvas : FrameworkElement
             CommandParameter = ch
         };
         menu.Items.Add(openPR);
+
+        var soundSettings = new MenuItem { Header = BuildMenuText("🎚️  Sound Settings…") };
+        soundSettings.Click += (_, _) => ChannelSoundSettingsWindow.ShowFor(ch.Model, Window.GetWindow(this));
+        menu.Items.Add(soundSettings);
 
         menu.Items.Add(new Separator { Background = new SolidColorBrush(Color.FromRgb(0x28, 0x30, 0x40)) });
 

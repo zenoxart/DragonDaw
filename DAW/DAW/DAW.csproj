@@ -15,10 +15,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="NAudio" Version="2.2.1" />
-  </ItemGroup>
-
-  <ItemGroup>
     <Resource Include="Assets\dragondawicon.png" />
   </ItemGroup>
 
@@ -26,6 +22,10 @@
     <Content Include="Assets\Audio\DragonSound.wav">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DAW.Model\DAW.Model.csproj" />
   </ItemGroup>
 
 </Project>

@@ -72,7 +72,7 @@ public class PluginWindow : Window
         EqualizerEffect  => (540, 360),
         CompressorEffect => (440, 420),
         SaturationEffect => (460, 320),
-        ReverbEffect     => (480, 490),
+        ReverbEffect     => (480, 626), // includes the room visualization panel
         GainEffect       => (260, 270),
         DelayEffect      => (360, 420),
         SpectreEffect    => (SpectreControl.MinW, SpectreControl.MinH),

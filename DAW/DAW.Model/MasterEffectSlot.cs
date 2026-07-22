@@ -24,7 +24,7 @@ public class MasterEffectSlot : INotifyPropertyChanged
     /// <summary>
     /// Links this slot to the master EffectChain so changes propagate to the audio pipeline.
     /// </summary>
-    internal void SetOwnerChain(EffectChain chain) => _ownerChain = chain;
+    public void SetOwnerChain(EffectChain chain) => _ownerChain = chain;
 
     public int SlotNumber
     {

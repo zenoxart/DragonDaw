@@ -207,6 +207,7 @@ internal sealed class PlaylistPatternEngine : IDisposable
 
             list.Add(new PatternSequencerProvider.ChannelSchedule
             {
+                Channel      = ch,
                 Sample       = sample,
                 StepActive   = active,
                 StepVelocity = velocity,

@@ -1,3 +1,5 @@
 <Solution>
+  <Project Path="DAW.Model/DAW.Model.csproj" Id="65911f1f-a3c2-417e-840f-45065751ea84" />
+  <Project Path="DAW.Plugins/DAW.Plugins.csproj" Id="3bb95592-1b41-4129-b792-2b170be28c29" />
   <Project Path="DAW/DAW.csproj" />
 </Solution>

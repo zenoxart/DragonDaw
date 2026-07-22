@@ -877,14 +877,31 @@ public class MainViewModel : INotifyPropertyChanged
 
         var bus = new ChannelRackBusProvider(MixEngine.MixFormat)
         {
-            Volume = (float)stripTrack.Volume,
-            Pan    = (float)stripTrack.Pan,
-            Muted  = stripTrack.IsMuted,
+            Volume  = (float)stripTrack.Volume,
+            Pan     = (float)stripTrack.Pan,
+            Muted   = stripTrack.IsMuted,
+            CutGroup        = model.CutGroup,
+            CutByGroup      = model.CutByGroup,
+            CutSelf         = model.CutSelf,
+            EnvelopeEnabled = model.EnvelopeEnabled,
         };
+        bus.SetEnvelope(new EnvelopeSettings(
+            model.EnvDelay, model.EnvAttack, model.EnvHold, model.EnvDecay,
+            model.EnvSustain, model.EnvRelease, model.EnvAttackTension, model.EnvReleaseTension));
+
+        // Bus (live/preview triggers) + tap (Playlist-triggered, sample-accurate
+        // pattern playback) are mixed together BEFORE the strip's insert FX, so
+        // both paths share the same Volume/Pan/Mute/FX/meter — this is what makes
+        // a rack pattern placed in the Playlist show up in the mixer at all.
+        var tap       = new PatternChannelTapProvider(MixEngine.MixFormat, model);
+        var tapVolPan = new VolumePanSampleProvider(tap) { Volume = (float)stripTrack.Volume, Pan = (float)stripTrack.Pan };
+        var combined  = new NAudio.Wave.SampleProviders.MixingSampleProvider(MixEngine.MixFormat) { ReadFully = true };
+        combined.AddMixerInput(bus);
+        combined.AddMixerInput(tapVolPan);
 
         // Bus → strip insert FX (the FX panel edits stripTrack.EffectSlots,
         // which feed stripTrack.EffectChain) → meter → master mixer.
-        var fx    = new EffectSampleProvider(bus, stripTrack.EffectChain);
+        var fx    = new EffectSampleProvider(combined, stripTrack.EffectChain);
         var meter = new MeteringSampleProvider(fx);
         MixEngine.AddInput(meter);
 
@@ -893,24 +910,55 @@ public class MainViewModel : INotifyPropertyChanged
         stripTrack.SetBusMeter(meter);
         stripTrack.Play();   // FilePath empty → only starts the meter timer
 
-        // Mixer UI edits (fader/pan/mute on the strip's Track) act on the bus.
+        // Mixer UI edits (fader/pan/mute on the strip's Track) act on the bus
+        // AND on the Playlist tap's own volume/pan, so both sources track the
+        // strip identically.
         stripTrack.PropertyChanged += (_, e) =>
         {
             switch (e.PropertyName)
             {
-                case nameof(Track.Volume):  bus.Volume = (float)stripTrack.Volume; break;
-                case nameof(Track.Pan):     bus.Pan    = (float)stripTrack.Pan;    break;
-                case nameof(Track.IsMuted): bus.Muted  = stripTrack.IsMuted;       break;
+                case nameof(Track.Volume):
+                    bus.Volume = (float)stripTrack.Volume;
+                    tapVolPan.Volume = stripTrack.IsMuted ? 0f : (float)stripTrack.Volume;
+                    break;
+                case nameof(Track.Pan):
+                    bus.Pan = (float)stripTrack.Pan;
+                    tapVolPan.Pan = (float)stripTrack.Pan;
+                    break;
+                case nameof(Track.IsMuted):
+                    bus.Muted = stripTrack.IsMuted;
+                    tapVolPan.Volume = stripTrack.IsMuted ? 0f : (float)stripTrack.Volume;
+                    break;
             }
         };
 
-        // Strip name follows the rack channel name.
+        // Strip name follows the rack channel name; Cut/Envelope edits from the
+        // channel's Sound Settings window apply live to the bus.
         model.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(ChannelModel.Name))
+            switch (e.PropertyName)
             {
-                stripTrack.Title = model.Name;
-                strip.Name       = model.Name;
+                case nameof(ChannelModel.Name):
+                    stripTrack.Title = model.Name;
+                    strip.Name       = model.Name;
+                    break;
+                case nameof(ChannelModel.CutGroup):   bus.CutGroup   = model.CutGroup;   break;
+                case nameof(ChannelModel.CutByGroup): bus.CutByGroup = model.CutByGroup; break;
+                case nameof(ChannelModel.CutSelf):    bus.CutSelf    = model.CutSelf;    break;
+                case nameof(ChannelModel.EnvelopeEnabled):
+                case nameof(ChannelModel.EnvDelay):
+                case nameof(ChannelModel.EnvAttack):
+                case nameof(ChannelModel.EnvHold):
+                case nameof(ChannelModel.EnvDecay):
+                case nameof(ChannelModel.EnvSustain):
+                case nameof(ChannelModel.EnvRelease):
+                case nameof(ChannelModel.EnvAttackTension):
+                case nameof(ChannelModel.EnvReleaseTension):
+                    bus.EnvelopeEnabled = model.EnvelopeEnabled;
+                    bus.SetEnvelope(new EnvelopeSettings(
+                        model.EnvDelay, model.EnvAttack, model.EnvHold, model.EnvDecay,
+                        model.EnvSustain, model.EnvRelease, model.EnvAttackTension, model.EnvReleaseTension));
+                    break;
             }
         };
 
@@ -924,6 +972,8 @@ public class MainViewModel : INotifyPropertyChanged
     {
         if (!_rackBuses.Remove(model, out var entry)) return;
         entry.Bus.KillAll();
+        entry.Bus.Detach();
+        PatternChannelBus.Remove(model);
         MixEngine.RemoveInput(entry.Wrapped);
         entry.StripTrack.SetBusMeter(null);
         entry.StripTrack.Stop();
